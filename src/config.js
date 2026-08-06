@@ -12,6 +12,7 @@ export const config = {
   token: process.env.BOT_TOKEN || '',
   publicUrl: (process.env.PUBLIC_URL || 'http://localhost:3000').replace(/\/$/, ''),
   admins: new Set((process.env.ADMIN_IDS || '').split(',').filter(Boolean).map(Number)),
+  adminChatId: Number(process.env.ADMIN_CHAT_ID || 0),
   dataKey: process.env.DATA_KEY || '',
   demo: !process.env.BOT_TOKEN,
 };
