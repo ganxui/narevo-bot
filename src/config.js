@@ -17,7 +17,7 @@ export const config = {
   dataKey: process.env.DATA_KEY || '',
   cryptoPay: {
     token: process.env.CRYPTOPAY_TOKEN || '',
-    testnet: String(process.env.CRYPTOPAY_TESTNET || 'false').toLowerCase()==='true',
+    testnet: false,
   },
   demo: !process.env.BOT_TOKEN,
 };
