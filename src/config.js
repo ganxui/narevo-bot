@@ -20,5 +20,15 @@ export const config = {
     token: process.env.CRYPTOPAY_TOKEN || '',
     testnet: false,
   },
+  heleket: {
+    merchantId: process.env.HELEKET_MERCHANT_ID || '',
+    apiKey: process.env.HELEKET_PAYMENT_API_KEY || '',
+    baseUrl: (process.env.HELEKET_API_URL || 'https://api.heleket.com').replace(/\/$/, ''),
+  },
+  buttonEmoji: {
+    cryptoBot: process.env.CRYPTOPAY_BUTTON_EMOJI_ID || '',
+    heleket: process.env.HELEKET_BUTTON_EMOJI_ID || '',
+    sbp: process.env.SBP_BUTTON_EMOJI_ID || '',
+  },
   demo: !process.env.BOT_TOKEN,
 };
