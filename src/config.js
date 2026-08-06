@@ -15,5 +15,9 @@ export const config = {
   adminChatId: Number(process.env.ADMIN_CHAT_ID || 0),
   productImageUrl: process.env.PRODUCT_IMAGE_URL || 'https://raw.githubusercontent.com/ganxui/narevo-bot/main/public/product-mail.png?v=2',
   dataKey: process.env.DATA_KEY || '',
+  cryptoPay: {
+    token: process.env.CRYPTOPAY_TOKEN || '',
+    testnet: String(process.env.CRYPTOPAY_TESTNET || 'false').toLowerCase()==='true',
+  },
   demo: !process.env.BOT_TOKEN,
 };
