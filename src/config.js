@@ -13,6 +13,7 @@ export const config = {
   publicUrl: (process.env.PUBLIC_URL || 'http://localhost:3000').replace(/\/$/, ''),
   admins: new Set((process.env.ADMIN_IDS || '').split(',').filter(Boolean).map(Number)),
   adminChatId: Number(process.env.ADMIN_CHAT_ID || 0),
+  productImageUrl: process.env.PRODUCT_IMAGE_URL || 'https://raw.githubusercontent.com/ganxui/narevo-bot/main/public/product-mail.png',
   dataKey: process.env.DATA_KEY || '',
   demo: !process.env.BOT_TOKEN,
 };
