@@ -8,7 +8,7 @@ const seed = { categories:[{id:'mail',title:'Почтовые подписки',
   { id:'gmail-plus', categoryId:'mail', title:'NAREVO Mail — Plus', term:'3 месяца', description:'Код активации расширенного тарифа для совместимого аккаунта.', price:1290, active:true }
 ], codes:[], users:{}, orders:[], topups:[], tickets:[], audit:[] };
 let db = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file,'utf8')) : structuredClone(seed);
-db.categories ||= structuredClone(seed.categories); db.tickets ||= []; for(const p of db.products)p.categoryId ||= 'mail';
+db.categories ||= structuredClone(seed.categories); db.tickets ||= []; db.uiMessages ||= {}; for(const p of db.products)p.categoryId ||= 'mail';
 const save = () => { fs.mkdirSync('data',{recursive:true}); fs.writeFileSync(file, JSON.stringify(db,null,2)); };
 if (!fs.existsSync(file)) save();
 const id = () => crypto.randomUUID();
@@ -32,5 +32,7 @@ export function setProductCategory(adminId,productId,categoryId){const p=db.prod
 export function createTicket(user){const existing=db.tickets.find(t=>t.userId===user.id&&t.status==='open');if(existing)return ticketView(existing);const t={id:id().slice(0,8),userId:user.id,userName:user.first_name||user.username||'Пользователь',status:'open',createdAt:new Date().toISOString(),messages:[{author:'system',text:'Тикет создан. Опишите вопрос одним сообщением.',at:new Date().toISOString()}]};db.tickets.push(t);audit(user.id,'ticket_created',t.id);save();return ticketView(t)}
 export function addTicketMessage(actor,ticketId,text,isAdmin=false){const t=db.tickets.find(x=>x.id===ticketId);text=String(text).trim().slice(0,2000);if(!t||!text||(!isAdmin&&t.userId!==actor))throw Error('Тикет недоступен');if(t.status!=='open')throw Error('Тикет закрыт');t.messages.push({author:isAdmin?'admin':'user',authorId:actor,text,at:new Date().toISOString()});t.updatedAt=new Date().toISOString();save();return ticketView(t)}
 export function closeTicket(adminId,ticketId){const t=db.tickets.find(x=>x.id===ticketId);if(!t)throw Error('Тикет не найден');t.status='closed';t.closedAt=new Date().toISOString();audit(adminId,'ticket_closed',t.id);save();return ticketView(t)}
+export function getUiMessage(chatId){return db.uiMessages[String(chatId)]||null}
+export function setUiMessage(chatId,messageId){if(messageId)db.uiMessages[String(chatId)]=messageId;else delete db.uiMessages[String(chatId)];save()}
 function ticketView(t){return {...t,messages:t.messages.slice(-20)}}
 function audit(actor,action,target){db.audit.push({id:id(),actor,action,target,at:new Date().toISOString()});}
