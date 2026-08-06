@@ -15,7 +15,3 @@ export const config = {
   dataKey: process.env.DATA_KEY || '',
   demo: !process.env.BOT_TOKEN,
 };
-
-if (!config.demo && !/^[a-f0-9]{64}$/i.test(config.dataKey)) {
-  throw new Error('DATA_KEY must be 64 hexadecimal characters');
-}

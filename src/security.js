@@ -3,7 +3,7 @@ import { config } from './config.js';
 
 const key = /^[a-f0-9]{64}$/i.test(config.dataKey)
   ? Buffer.from(config.dataKey, 'hex')
-  : crypto.createHash('sha256').update('narevo-local-demo-only').digest();
+  : crypto.createHash('sha256').update(`narevo:${config.token || 'local-demo-only'}`).digest();
 
 export function encrypt(value) {
   const iv = crypto.randomBytes(12);
