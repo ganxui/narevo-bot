@@ -299,7 +299,40 @@ async function show(chatId,user,section,messageId){const data=userView(user);con
   else if(section==='admin_topups'&&admin){const pending=adminView().topups.filter(x=>x.status==='pending'&&!x.cryptoPayInvoiceId&&!x.heleketInvoiceId);text='<b>Заявки на пополнение</b>\n\n'+(pending.length?pending.map(t=>`${paymentLabel(t.method)} · ID ${t.userId}\n${topupSummary(t)}`).join('\n\n'):'Новых заявок для ручного подтверждения нет.');keyboard=pending.map(t=>[{text:`${paymentLabel(t.method)} · оплатить ${money(t.paymentAmount??t.amount)}`,callback_data:`approve:${t.id}`}]);keyboard.push([{text:'‹ В админ-панель',callback_data:'admin'}]);}
   else if(section==='admin_stock'&&admin){const a=adminView();text='<b>Остатки товаров</b>\n\n'+a.products.map(p=>`${p.title}: <b>${p.stock}</b>`).join('\n')+'\n\nДля безопасной загрузки кодов используйте Mini App или API админ-панели.';keyboard=[[{text:'‹ В админ-панель',callback_data:'admin'}]];}
   else{text='<b>NAREVO MAIL</b>\nОфициальные цифровые коды подписок.\n\nВыберите раздел:';keyboard=menu(user,admin).inline_keyboard;}
-  const reply_markup={inline_keyboard:keyboard};if(messageId)await tgApi('editMessageMedia',{chat_id:chatId,message_id:messageId,media:{type:'photo',media:imageForSection(section),caption:text,parse_mode:'HTML'},reply_markup});else{const response=await tgApi('sendPhoto',{chat_id:chatId,photo:imageForSection(section),caption:text,parse_mode:'HTML',reply_markup});if(response.ok){const sent=await response.clone().json();setUiMessage(chatId,sent.result.message_id)}}
+  
+  const reply_markup={inline_keyboard:keyboard};
+  const isTextOnly = section === 'privacy' || section === 'terms' || section === 'welcome' || section === 'home';
+  
+  if(messageId){
+    if(isTextOnly) {
+      await tgApi('editMessageText',{
+        chat_id:chatId,
+        message_id:messageId,
+        text:text,
+        parse_mode:'HTML',
+        reply_markup
+      });
+    } else {
+      await tgApi('editMessageMedia',{
+        chat_id:chatId,
+        message_id:messageId,
+        media:{type:'photo',media:imageForSection(section),caption:text,parse_mode:'HTML'},
+        reply_markup
+      });
+    }
+  } else {
+    const response=await tgApi('sendPhoto',{
+      chat_id:chatId,
+      photo:imageForSection(section),
+      caption:text,
+      parse_mode:'HTML',
+      reply_markup
+    });
+    if(response.ok){
+      const sent=await response.clone().json();
+      setUiMessage(chatId,sent.result.message_id);
+    }
+  }
 }
 
 async function botLoop(offset=0){if(!config.token)return;try{const r=await fetch(`https://api.telegram.org/bot${config.token}/getUpdates?timeout=25&offset=${offset}`);const d=await r.json();for(const update of d.result||[]){offset=update.update_id+1;const m=update.message;const q=update.callback_query;
