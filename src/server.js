@@ -5,7 +5,7 @@ import { config } from './config.js';
 import { verifyTelegram } from './security.js';
 import { createCryptoPayInvoice,cryptoPayReady,getCryptoPayInvoice,verifyCryptoPayWebhook } from './cryptobot.js';
 import { createHeleketInvoice,getHeleketInvoice,heleketReady } from './heleket.js';
-import { userView,adminView,buy,requestTopup,attachCryptoPayInvoice,attachHeleketInvoice,failTopup,settleCryptoPayInvoice,settleHeleketInvoice,addCodes,approveTopup,addProduct,archiveProduct,addCategory,toggleCategory,updateProductPrice,setProductCategory,createTicket,addTicketMessage,closeTicket,getUiMessage,setUiMessage,getButtonEmojis,setButtonEmojis } from './store.js';
+import { userView,adminView,buy,requestTopup,attachCryptoPayInvoice,attachHeleketInvoice,failTopup,settleCryptoPayInvoice,settleHeleketInvoice,addCodes,approveTopup,addProduct,archiveProduct,addCategory,toggleCategory,updateProductPrice,setProductCategory,createTicket,addTicketMessage,closeTicket,getUiMessage,setUiMessage,getButtonEmojis,setButtonEmojis,setUserAgreed,hasUserAgreed } from './store.js';
 
 const types={'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8','.png':'image/png','.svg':'image/svg+xml'};
 const json=(res,status,data)=>{res.writeHead(status,{'content-type':'application/json; charset=utf-8','cache-control':'no-store'});res.end(JSON.stringify(data));};
@@ -30,7 +30,7 @@ const server=http.createServer(async(req,res)=>{try{
     if(req.url==='/api/admin/products'&&req.method==='POST')return json(res,200,addProduct(user.id,b));
     return json(res,404,{error:'Не найдено'});
   }
-  let target=pathname==='/'?'public/index.html':`public${pathname}`; target=path.normalize(target); if(!target.startsWith('public')){res.writeHead(403);return res.end()};
+    let target=pathname==='/'?'public/index.html':`public${pathname}`; target=path.normalize(target); if(!target.startsWith('public')){res.writeHead(403);return res.end()};
   if(!fs.existsSync(target)||fs.statSync(target).isDirectory()){res.writeHead(404);return res.end('Not found')}; res.writeHead(200,{'content-type':types[path.extname(target)]||'application/octet-stream'});fs.createReadStream(target).pipe(res);
 }catch(e){json(res,e.message.includes('Telegram')?401:400,{error:e.message})}});
 
@@ -41,7 +41,17 @@ const html=value=>String(value??'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;'
 const button=(text,callback_data,style,icon_custom_emoji_id)=>({text,callback_data,...(style?{style}:{}),...(icon_custom_emoji_id?{icon_custom_emoji_id}:{})});
 const linkButton=(text,url,style)=>({text,url,...(style?{style}:{})});
 const pendingInput=new Map();
+
 const menu=(user,admin)=>({inline_keyboard:[[button('🛍 Каталог','catalog','primary'),button('👤 Кабинет','profile')],[button('📦 Покупки','orders'),button('💳 Пополнить','topup')],[button('📜 Правила','rules'),button('💬 Поддержка','support')],[button('🔒 Политика конфиденциальности','privacy')],[button('📄 Пользовательское соглашение','terms')],...(admin?[[button('⚙️ Админ-панель','admin')]]:[])]});
+
+const welcomeMenu = () => ({
+  inline_keyboard: [
+    [button('🔒 Политика конфиденциальности', 'privacy', 'primary')],
+    [button('📄 Пользовательское соглашение', 'terms', 'primary')],
+    [button('✅ Подтверждаю и перехожу в магазин', 'agree', 'success')]
+  ]
+});
+
 const quickSections=new Map([['🛍 Каталог','catalog'],['👤 Кабинет','profile'],['📦 Покупки','orders'],['💳 Пополнить','topup'],['💬 Поддержка','support']]);
 const quickMenu=()=>({keyboard:[[{text:'🛍 Каталог'},{text:'👤 Кабинет'}],[{text:'📦 Покупки'},{text:'💳 Пополнить'}],[{text:'💬 Поддержка'}]],resize_keyboard:true,is_persistent:true,input_field_placeholder:'Выберите раздел NAREVO'});
 const paymentButton=(label,fallbackIcon,callback,style,customIcon)=>button(`${customIcon?'':`${fallbackIcon} `}${label}`,callback,style,customIcon);
@@ -57,7 +67,7 @@ const paymentLabel=method=>{
 };
 const topupSummary=t=>{const payable=Number(t.displayAmount??t.paymentAmount??t.amount);const fee=Math.round((payable-Number(t.amount))*100)/100;return `На баланс: <b>${money(t.amount)}</b>\nКомиссия: <b>${money(fee)}</b>\nК оплате: <b>${money(payable)}</b>`};
 async function installQuickMenu(chatId){const response=await tgApi('sendMessage',{chat_id:chatId,text:'Быстрое меню включено.',reply_markup:quickMenu()});if(response.ok){const sent=await response.clone().json();await tgApi('deleteMessage',{chat_id:chatId,message_id:sent.result.message_id})}}
-const imageForSection=section=>{let name='catalog';if(section==='home')return config.productImageUrl;if(section==='profile')name='profile';else if(section==='orders')name='orders';else if(section==='topup'||section.startsWith('paymethod:')||section.startsWith('topup_custom:'))name='pay';else if(section==='rules'||section.startsWith('rule:'))name='rules';else if(section==='support'||section.startsWith('ticket:'))name='support';else if(section.startsWith('admin')||section.startsWith('category_')||section.startsWith('product_')||section.startsWith('price_')||section.startsWith('codes_'))name='admin';return `${config.sectionImageBaseUrl}/section-${name}.png?v=1`};
+const imageForSection=section=>{let name='catalog';if(section==='home')return config.productImageUrl;if(section==='profile')name='profile';else if(section==='orders')name='orders';else if(section==='topup'||section.startsWith('paymethod:')||section.startsWith('topup_custom:'))name='pay';else if(section==='rules'||section.startsWith('rule:'))name='rules';else if(section==='support'||section.startsWith('ticket:'))name='support';else if(section.startsWith('admin')||section.startsWith('category_')||section.startsWith('product_')||section.startsWith('price_')||section.startsWith('codes_'))name='admin';else if(section==='privacy'||section==='terms'||section==='agree')name='rules';return `${config.sectionImageBaseUrl}/section-${name}.png?v=1`};
 async function startCryptoBotTopup(user,amount){if(!cryptoPayReady(config))throw Error('CryptoBot пока не настроен');const topup=requestTopup(user,amount,'cryptobot');try{const invoice=await createCryptoPayInvoice(config,{amount:topup.amount,userId:user.id,topupId:topup.id});return attachCryptoPayInvoice(topup.id,invoice.invoiceId,invoice.paymentUrl)}catch(e){failTopup(topup.id,e.message);throw e}}
 async function startHeleketTopup(user,amount){if(!heleketReady(config))throw Error('Heleket пока не настроен');const topup=requestTopup(user,amount,'heleket');try{const invoice=await createHeleketInvoice(config,{amount:topup.amount,topupId:topup.id});return attachHeleketInvoice(topup.id,invoice.invoiceId,invoice.paymentUrl)}catch(e){failTopup(topup.id,e.message);throw e}}
 const heleketKeyboard=(invoiceId,paymentUrl,repeat=false)=>({inline_keyboard:[...(paymentUrl?[[linkButton('Оплатить через Heleket',paymentUrl,'primary')]]:[]),[button(repeat?'✅ Проверить ещё раз':'✅ Проверить оплату',`heleketcheck:${invoiceId}`,'success')],[button('← Главное меню','home')]]});
@@ -214,6 +224,41 @@ function getTermsOfService() {
 Используя Сервис (в том числе запуская бота и/или вводя команду /start), Пользователь подтверждает, что ознакомлен с настоящим Соглашением и принимает его условия в полном объёме.`;
 }
 
+async function showWelcome(chatId, user, messageId) {
+  const text = `👋 <b>Добро пожаловать в NAREVO MAIL!</b>
+
+Перед началом использования бота, пожалуйста, ознакомьтесь с документами:
+
+• <b>Политика конфиденциальности</b> — как мы обрабатываем ваши данные
+• <b>Пользовательское соглашение</b> — условия использования сервиса
+
+Нажимайте на кнопки, чтобы прочитать документы.
+После ознакомления нажмите <b>«Подтверждаю»</b> для доступа в магазин.`;
+
+  const reply_markup = welcomeMenu();
+  
+  if (messageId) {
+    await tgApi('editMessageText', {
+      chat_id: chatId,
+      message_id: messageId,
+      text: text,
+      parse_mode: 'HTML',
+      reply_markup: reply_markup
+    });
+  } else {
+    const response = await tgApi('sendMessage', {
+      chat_id: chatId,
+      text: text,
+      parse_mode: 'HTML',
+      reply_markup: reply_markup
+    });
+    if (response.ok) {
+      const sent = await response.clone().json();
+      setUiMessage(chatId, sent.result.message_id);
+    }
+  }
+}
+
 async function show(chatId,user,section,messageId){const data=userView(user);const admin=await hasAdminAccess(user.id);let text='';let keyboard=[];
   if(section==='catalog'){text='<b>🛍 Каталог</b>\n\nВыберите раздел, чтобы посмотреть товары:';keyboard=data.categories.map((c,i)=>[button(`📁 ${c.title}  ›`,`category:${i}`)]);keyboard.push([button('← Главное меню','home')]);}
   else if(section.startsWith('category:')){const category=data.categories[Number(section.slice(9))];if(!category)return;const items=data.products.filter(p=>p.categoryId===category.id);text=`<b>📁 ${html(category.title)}</b>\n\n${items.length?'Выберите товар:':'В этом разделе пока нет товаров.'}`;keyboard=items.map(p=>[button(`📦 ${p.title} · ${money(p.price)} · ${p.stock} шт.`,`product:${p.id}`)]);keyboard.push([button('← Все разделы','catalog')]);}
@@ -231,8 +276,9 @@ async function show(chatId,user,section,messageId){const data=userView(user);con
   else if(section==='crypto_payments'){const icons=paymentEmojis();text='<b>🪙 Криптовалюта</b>\n\nКомиссия: <b>0%</b>\nДоступные способы: USDT (CryptoBot) и другие криптовалюты через Heleket.\nМинимальная сумма: 50 ₽';keyboard=[[paymentButton('CryptoBot · USDT','💎','paymethod:cryptobot','primary',icons.cryptoBot)],[paymentButton('Crypto · Heleket','🔥','paymethod:heleket','danger',icons.heleket)],[button('← Назад','topup')]];}
   else if(section.startsWith('paymethod:')){const method=section.slice(10);const label=paymentLabel(method);text=`<b>${label}</b>\n\nВыберите сумму пополнения:`;keyboard=[[500,1000,2000].map(x=>button(money(x),`topup:${method}:${x}`,'primary')),[button('✏️ Ввести свою сумму',`topup_custom:${method}`)],[button('← Назад',section==='fiat_payments'?'fiat_payments':'crypto_payments')]];}
   else if(section.startsWith('topup_custom:')){const method=section.slice(13);pendingInput.set(user.id,{type:'topup_custom',method});text=`<b>✏️ Своя сумма · ${paymentLabel(method)}</b>\n\nВведите сумму от 50 до 100 000 ₽ одним сообщением.`;keyboard=[[button('Отмена','topup')]];}
-  else if(section==='privacy'){text=getPrivacyPolicy();keyboard=[[button('← В меню','home')]];}
-  else if(section==='terms'){text=getTermsOfService();keyboard=[[button('← В меню','home')]];}
+  else if(section==='privacy'){text=getPrivacyPolicy();keyboard=[[button('← Назад', hasUserAgreed(user.id) ? 'home' : 'welcome')]];}
+  else if(section==='terms'){text=getTermsOfService();keyboard=[[button('← Назад', hasUserAgreed(user.id) ? 'home' : 'welcome')]];}
+  else if(section==='welcome'){await showWelcome(chatId, user, messageId);return;}
   else if(section==='rules'){text='<b>📜 Правила NAREVO MAIL</b>\n\nЗдесь собраны основные условия работы магазина. Выберите нужный раздел:';keyboard=[[button('🔐 Конфиденциальность','rule:privacy')],[button('🛍 Покупка и выдача','rule:purchase')],[button('↩️ Возвраты','rule:refund')],[button('💬 Поддержка','rule:support')],[button('← Главное меню','home')]];}
   else if(section==='rule:privacy'){text='<b>🔐 Конфиденциальность</b>\n\nБот хранит только данные, необходимые для работы: Telegram ID, имя, историю покупок, пополнений и обращений в поддержку.\n\nПлатёжные данные и пароли от сторонних сервисов бот не запрашивает и не хранит. Коды товаров хранятся в зашифрованном виде. Данные не передаются посторонним, кроме случаев, необходимых для оплаты, работы сервиса или предусмотренных законом.';keyboard=[[button('← Ко всем правилам','rules')]];}
   else if(section==='rule:purchase'){text='<b>🛍 Правила покупки</b>\n\nПеред оплатой внимательно проверьте название товара, срок подписки, регион активации, цену и описание.\n\nПосле подтверждения покупки с баланса списывается указанная сумма, а цифровой код появляется в разделе «Покупки». Код предназначен только для выбранного товара. Передавать его другим людям после получения небезопасно.';keyboard=[[button('← Ко всем правилам','rules')]];}
@@ -255,6 +301,7 @@ async function show(chatId,user,section,messageId){const data=userView(user);con
   else{text='<b>NAREVO MAIL</b>\nОфициальные цифровые коды подписок.\n\nВыберите раздел:';keyboard=menu(user,admin).inline_keyboard;}
   const reply_markup={inline_keyboard:keyboard};if(messageId)await tgApi('editMessageMedia',{chat_id:chatId,message_id:messageId,media:{type:'photo',media:imageForSection(section),caption:text,parse_mode:'HTML'},reply_markup});else{const response=await tgApi('sendPhoto',{chat_id:chatId,photo:imageForSection(section),caption:text,parse_mode:'HTML',reply_markup});if(response.ok){const sent=await response.clone().json();setUiMessage(chatId,sent.result.message_id)}}
 }
+
 async function botLoop(offset=0){if(!config.token)return;try{const r=await fetch(`https://api.telegram.org/bot${config.token}/getUpdates?timeout=25&offset=${offset}`);const d=await r.json();for(const update of d.result||[]){offset=update.update_id+1;const m=update.message;const q=update.callback_query;
     if(m?.text?.startsWith('/'))await tgApi('deleteMessage',{chat_id:m.chat.id,message_id:m.message_id});
     if(m?.text&&!m.text.startsWith('/')&&pendingInput.has(m.from.id)){await tgApi('deleteMessage',{chat_id:m.chat.id,message_id:m.message_id});const promptId=transientMessages.get(m.chat.id);if(promptId){await tgApi('deleteMessage',{chat_id:m.chat.id,message_id:promptId});transientMessages.delete(m.chat.id)}}
@@ -265,11 +312,42 @@ async function botLoop(offset=0){if(!config.token)return;try{const r=await fetch
     if(m?.text&&!m.text.startsWith('/')&&pendingInput.get(m.from.id)?.type==='topup_custom'&&pendingInput.get(m.from.id)?.method==='sbp'){
       try{const amount=Number(m.text.replace(/\s/g,''));const t=requestTopup(m.from,amount,'sbp');pendingInput.delete(m.from.id);await tgApi('sendMessage',{chat_id:m.chat.id,text:`<b>Заявка ${paymentLabel(t.method)} создана</b>\n\n${topupSummary(t)}\n\nАдминистратор пришлёт реквизиты и подтвердит оплату.`,parse_mode:'HTML'});for(const a of config.admins)await notify(a,`💳 ${paymentLabel(t.method)} · к оплате ${money(t.paymentAmount)} · на баланс ${money(t.amount)} · пользователь ${m.from.id}`);if(config.adminChatId)await notify(config.adminChatId,`💳 ${paymentLabel(t.method)} · к оплате ${money(t.paymentAmount)} · на баланс ${money(t.amount)} · пользователь ${m.from.id}`);}catch(e){await tgApi('sendMessage',{chat_id:m.chat.id,text:`Введите сумму ещё раз. ${html(e.message)}`});}continue;
     }
-    if(m?.text==='/start'||m?.text==='/menu'){const oldId=getUiMessage(m.chat.id);if(oldId)await tgApi('deleteMessage',{chat_id:m.chat.id,message_id:oldId});await installQuickMenu(m.chat.id);const admin=await hasAdminAccess(m.from.id);const response=await tgApi('sendPhoto',{chat_id:m.chat.id,photo:config.productImageUrl,caption:'<b>NAREVO MAIL</b>\nЦифровые коды подписок.\n\nВыберите раздел:',parse_mode:'HTML',reply_markup:menu(m.from,admin)});if(response.ok){const sent=await response.clone().json();setUiMessage(m.chat.id,sent.result.message_id)}}
+    if(m?.text==='/start'||m?.text==='/menu'){
+      const oldId=getUiMessage(m.chat.id);
+      if(oldId)await tgApi('deleteMessage',{chat_id:m.chat.id,message_id:oldId});
+      
+      // Проверяем, согласился ли пользователь с условиями
+      if(!hasUserAgreed(m.from.id)) {
+        await installQuickMenu(m.chat.id);
+        await showWelcome(m.chat.id, m.from, null);
+        continue;
+      }
+      
+      await installQuickMenu(m.chat.id);
+      const admin=await hasAdminAccess(m.from.id);
+      const response=await tgApi('sendPhoto',{
+        chat_id:m.chat.id,
+        photo:config.productImageUrl,
+        caption:'<b>NAREVO MAIL</b>\nЦифровые коды подписок.\n\nВыберите раздел:',
+        parse_mode:'HTML',
+        reply_markup:menu(m.from, admin)
+      });
+      if(response.ok){const sent=await response.clone().json();setUiMessage(m.chat.id,sent.result.message_id)}
+    }
     else if(m?.text==='/id')await tgApi('sendMessage',{chat_id:m.chat.id,text:`Ваш Telegram ID: <code>${m.from.id}</code>`,parse_mode:'HTML'});
     else if(m?.text==='/chatid'&&['group','supergroup'].includes(m.chat.type))await tgApi('sendMessage',{chat_id:m.chat.id,text:`ID служебного чата: <code>${m.chat.id}</code>`,parse_mode:'HTML'});
     else if(m?.text==='/emoji'&&await hasAdminAccess(m.from.id)){pendingInput.set(m.from.id,{type:'button_emojis'});await tgApi('sendMessage',{chat_id:m.chat.id,text:'Отправьте <b>одним сообщением три премиум-эмодзи</b> в таком порядке:\n\n1. CryptoBot\n2. Heleket\n3. СБП\n\nМожно просто поставить их подряд через пробел.',parse_mode:'HTML'});}
-    else if(m?.text&&quickSections.has(m.text)){await tgApi('deleteMessage',{chat_id:m.chat.id,message_id:m.message_id});pendingInput.delete(m.from.id);const section=quickSections.get(m.text);await show(m.chat.id,m.from,section,getUiMessage(m.chat.id));}
+    else if(m?.text&&quickSections.has(m.text)){
+      // Проверяем согласие перед переходом в разделы
+      if(!hasUserAgreed(m.from.id)) {
+        await showWelcome(m.chat.id, m.from, getUiMessage(m.chat.id));
+        continue;
+      }
+      await tgApi('deleteMessage',{chat_id:m.chat.id,message_id:m.message_id});
+      pendingInput.delete(m.from.id);
+      const section=quickSections.get(m.text);
+      await show(m.chat.id,m.from,section,getUiMessage(m.chat.id));
+    }
     else if(m?.text&&!m.text.startsWith('/')&&pendingInput.has(m.from.id)){
       const task=pendingInput.get(m.from.id);const admin=await hasAdminAccess(m.from.id);
       try{let done=true;let success='✅ Сохранено. Отправьте /menu, чтобы продолжить.';
@@ -282,8 +360,46 @@ async function botLoop(offset=0){if(!config.token)return;try{const r=await fetch
         else if(admin&&task.type==='product_add'){task.draft[task.step]=m.text.trim();const next={title:['term','Введите срок, например «1 месяц»:'],term:['description','Введите краткое описание товара:'],description:['price','Введите цену числом в рублях:']}[task.step];if(next){task.step=next[0];pendingInput.set(m.from.id,task);done=false;await tgApi('sendMessage',{chat_id:m.chat.id,text:next[1]})}else addProduct(m.from.id,task.draft)}
         if(done){pendingInput.delete(m.from.id);await tgApi('sendMessage',{chat_id:m.chat.id,text:success})}
       }catch(e){if(task.type==='topup_custom'){pendingInput.set(m.from.id,task);await tgApi('sendMessage',{chat_id:m.chat.id,text:`Введите сумму ещё раз. ${e.message}`})}else{pendingInput.delete(m.from.id);await tgApi('sendMessage',{chat_id:m.chat.id,text:`Ошибка: ${e.message}`})}}}
-    if(q&&(q.data.startsWith('topup:sbp:'))){await tgApi('answerCallbackQuery',{callback_query_id:q.id});try{const amount=Number(q.data.split(':')[2]);const t=requestTopup(q.from,amount,'sbp');await tgApi('editMessageText',{chat_id:q.message.chat.id,message_id:q.message.message_id,text:`<b>Заявка ${paymentLabel(t.method)} создана</b>\n\n${topupSummary(t)}\n\nАдминистратор пришлёт реквизиты и подтвердит оплату.`,parse_mode:'HTML',reply_markup:{inline_keyboard:[[button('💬 Написать в поддержку','support')],[button('← Главное меню','home')]]}});for(const a of config.admins)await notify(a,`💳 ${paymentLabel(t.method)} · к оплате ${money(t.paymentAmount)} · на баланс ${money(t.amount)} · пользователь ${q.from.id}`);if(config.adminChatId)await notify(config.adminChatId,`💳 ${paymentLabel(t.method)} · к оплате ${money(t.paymentAmount)} · на баланс ${money(t.amount)} · пользователь ${q.from.id}`);}catch(e){await tgApi('sendMessage',{chat_id:q.message.chat.id,text:`Ошибка: ${html(e.message)}`});}continue;}
-    if(q&&(q.data.startsWith('topup:heleket:')||q.data.startsWith('heleketcheck:'))){await tgApi('answerCallbackQuery',{callback_query_id:q.id});try{if(q.data.startsWith('topup:heleket:')){const amount=Number(q.data.slice(15));const t=await startHeleketTopup(q.from,amount);await tgApi('editMessageText',{chat_id:q.message.chat.id,message_id:q.message.message_id,text:`<b>Счёт Heleket создан</b>\n\nСумма: ${money(t.amount)}\nКриптовалюту и сеть выберите на странице оплаты.\nПосле оплаты вернитесь сюда и нажмите «Проверить оплату».`,parse_mode:'HTML',reply_markup:heleketKeyboard(t.heleketInvoiceId,t.paymentUrl)});}else{const invoiceId=q.data.slice(13);const {invoice,status,settled}=await verifyAndSettleHeleketInvoice(invoiceId);if(settled)await show(q.message.chat.id,q.from,'profile',q.message.message_id);else if(['fail','cancel','system_fail','wrong_amount','locked'].includes(status)){await tgApi('editMessageText',{chat_id:q.message.chat.id,message_id:q.message.message_id,text:'<b>⌛ Счёт Heleket не оплачен</b>\n\nСоздайте новый счёт или обратитесь в поддержку.',parse_mode:'HTML',reply_markup:{inline_keyboard:[[button('Создать новый счёт','paymethod:heleket','primary')],[button('💬 Поддержка','support')],[button('← Главное меню','home')]]}});}else{await tgApi('editMessageText',{chat_id:q.message.chat.id,message_id:q.message.message_id,text:`<b>⏳ Оплата пока не подтверждена</b>\n\nСумма: ${money(invoice.amount)}\nСтатус: ${html(status||'проверяется')}\nОплатите счёт и повторите проверку.`,parse_mode:'HTML',reply_markup:heleketKeyboard(invoiceId,invoice.url,true)});}}}catch(e){await tgApi('sendMessage',{chat_id:q.message.chat.id,text:`Ошибка Heleket: ${html(e.message)}`});}continue;}
-    if(q){await tgApi('answerCallbackQuery',{callback_query_id:q.id});const action=q.data;try{if(action.startsWith('buy:')){const out=buy(q.from,action.slice(4));await tgApi('sendMessage',{chat_id:q.message.chat.id,text:`✅ <b>Покупка выполнена</b>\n${out.title}\n\nВаш код:\n<code>${out.code}</code>`,parse_mode:'HTML'});await show(q.message.chat.id,q.from,'profile',q.message.message_id)}else if(action.startsWith('cryptocheck:')){const invoiceId=action.slice(12);const {invoice,settled}=await verifyAndSettleCryptoInvoice(invoiceId);if(settled)await show(q.message.chat.id,q.from,'profile',q.message.message_id);else if(invoice.status==='expired')await tgApi('editMessageText',{chat_id:q.message.chat.id,message_id:q.message.message_id,text:'<b>⌛ Счёт CryptoBot истёк</b>\n\nСоздайте новый счёт в разделе пополнения.',parse_mode:'HTML',reply_markup:{inline_keyboard:[[button('Создать новый счёт','paymethod:cryptobot','primary')],[button('← Главное меню','home')]]}});else{const paymentUrl=invoice.bot_invoice_url||invoice.mini_app_invoice_url||invoice.web_app_invoice_url;await tgApi('editMessageText',{chat_id:q.message.chat.id,message_id:q.message.message_id,text:`<b>⏳ Оплата пока не найдена</b>\n\nСумма: ${money(invoice.amount)}\nОплата: USDT\nОплатите счёт и повторите проверку.`,parse_mode:'HTML',reply_markup:{inline_keyboard:[[linkButton('Оплатить в CryptoBot',paymentUrl,'primary')],[button('✅ Проверить ещё раз',`cryptocheck:${invoice.invoice_id}`,'success')],[button('← Главное меню','home')]]}})}}else if(action.startsWith('topup:')){const [,method,amount]=action.split(':');if(method==='cryptobot'){const t=await startCryptoBotTopup(q.from,Number(amount));await tgApi('editMessageText',{chat_id:q.message.chat.id,message_id:q.message.message_id,text:`<b>Счёт CryptoBot создан</b>\n\nСумма: ${money(t.amount)}\nОплата: USDT\nПосле оплаты вернитесь сюда и нажмите «Проверить оплату».`,parse_mode:'HTML',reply_markup:{inline_keyboard:[[linkButton('Оплатить в CryptoBot',t.paymentUrl,'primary')],[button('✅ Проверить оплату',`cryptocheck:${t.cryptoPayInvoiceId}`,'success')],[button('← Главное меню','home')]]}})}else{const t=requestTopup(q.from,Number(amount),method);await tgApi('editMessageText',{chat_id:q.message.chat.id,message_id:q.message.message_id,text:`✅ Заявка на ${money(t.amount)} через ${paymentLabel(method)} создана.\nАдминистратор пришлёт реквизиты и подтвердит оплату.`,reply_markup:{inline_keyboard:[[{text:'🛟 Написать в поддержку',callback_data:'support'}],[{text:'‹ В меню',callback_data:'home'}]]}});for(const a of config.admins)await notify(a,`💳 Заявка ${method} на ${money(t.amount)} · пользователь ${q.from.id}`);if(config.adminChatId)await notify(config.adminChatId,`💳 Заявка ${method} на ${money(t.amount)} · пользователь ${q.from.id}`)}}else if(action==='ticket_new'){const t=createTicket(q.from);if(config.adminChatId)await notify(config.adminChatId,`🎫 Создан тикет <b>#${t.id}</b> от ${html(t.userName)}.`);await show(q.message.chat.id,q.from,`ticket:${t.id}`,q.message.message_id)}else if(action.startsWith('ticket_reply:')){pendingInput.set(q.from.id,{type:'ticket',id:action.slice(13)});await tgApi('sendMessage',{chat_id:q.message.chat.id,text:'✍️ Отправьте следующее сообщение — оно попадёт в тикет.'})}else if(action.startsWith('ticket_close:')&&await hasAdminAccess(q.from.id)){closeTicket(q.from.id,action.slice(13));await show(q.message.chat.id,q.from,'admin_tickets',q.message.message_id)}else if(action==='category_add'&&await hasAdminAccess(q.from.id)){pendingInput.set(q.from.id,{type:'category'});await tgApi('sendMessage',{chat_id:q.message.chat.id,text:'Введите название новой категории:'})}else if(action.startsWith('category_toggle:')&&await hasAdminAccess(q.from.id)){toggleCategory(q.from.id,action.slice(16));await show(q.message.chat.id,q.from,'admin_categories',q.message.message_id)}else if(action.startsWith('product_setcat:')&&await hasAdminAccess(q.from.id)){const [,pi,ci]=action.split(':');const a=adminView();setProductCategory(q.from.id,a.products[Number(pi)]?.id,a.categories[Number(ci)]?.id);await show(q.message.chat.id,q.from,`admin_product:${pi}`,q.message.message_id)}else if(action.startsWith('price_edit:')&&await hasAdminAccess(q.from.id)){const p=adminView().products[Number(action.slice(11))];pendingInput.set(q.from.id,{type:'price',id:p?.id});await tgApi('sendMessage',{chat_id:q.message.chat.id,text:'Введите новую цену числом в рублях:'})}else if(action.startsWith('codes_add:')&&await hasAdminAccess(q.from.id)){const p=adminView().products[Number(action.slice(10))];pendingInput.set(q.from.id,{type:'codes',id:p?.id});await tgApi('sendMessage',{chat_id:q.message.chat.id,text:'Отправьте коды активации: один код на строку. Логины и пароли не принимаются.'})}else if(action.startsWith('approve:')&&await hasAdminAccess(q.from.id)){const t=approveTopup(q.from.id,action.slice(8));await notify(t.userId,`✅ Баланс пополнен на <b>${money(t.amount)}</b>.`);await show(q.message.chat.id,q.from,'admin_topups',q.message.message_id)}else if(action!=='noop')await show(q.message.chat.id,q.from,action,q.message.message_id)}catch(e){await tgApi('sendMessage',{chat_id:q.message.chat.id,text:`Ошибка: ${html(e.message)}`})}}
+    
+    // Обработка callback запросов
+    if(q){await tgApi('answerCallbackQuery',{callback_query_id:q.id});const action=q.data;try{
+      // Обработка согласия с условиями
+      if(action === 'agree'){
+        setUserAgreed(q.from.id);
+        await installQuickMenu(q.message.chat.id);
+        const admin=await hasAdminAccess(q.from.id);
+        await tgApi('editMessageText',{
+          chat_id:q.message.chat.id,
+          message_id:q.message.message_id,
+          text:'✅ <b>Спасибо!</b>\n\nВы подтвердили ознакомление с документами. Добро пожаловать в NAREVO MAIL! 🎉',
+          parse_mode:'HTML',
+          reply_markup:{inline_keyboard:[[button('🛍 Перейти в магазин','home','primary')]]}
+        });
+        continue;
+      }
+      
+      // Проверяем согласие для всех действий, кроме просмотра документов
+      if(action !== 'privacy' && action !== 'terms' && action !== 'welcome' && !hasUserAgreed(q.from.id)){
+        await showWelcome(q.message.chat.id, q.from, q.message.message_id);
+        continue;
+      }
+      
+      if(action === 'privacy' || action === 'terms' || action === 'welcome'){
+        await show(q.message.chat.id, q.from, action, q.message.message_id);
+      }
+      else if(action.startsWith('buy:')){const out=buy(q.from,action.slice(4));await tgApi('sendMessage',{chat_id:q.message.chat.id,text:`✅ <b>Покупка выполнена</b>\n${out.title}\n\nВаш код:\n<code>${out.code}</code>`,parse_mode:'HTML'});await show(q.message.chat.id,q.from,'profile',q.message.message_id)}
+      else if(action.startsWith('cryptocheck:')){const invoiceId=action.slice(12);const {invoice,settled}=await verifyAndSettleCryptoInvoice(invoiceId);if(settled)await show(q.message.chat.id,q.from,'profile',q.message.message_id);else if(invoice.status==='expired')await tgApi('editMessageText',{chat_id:q.message.chat.id,message_id:q.message.message_id,text:'<b>⌛ Счёт CryptoBot истёк</b>\n\nСоздайте новый счёт в разделе пополнения.',parse_mode:'HTML',reply_markup:{inline_keyboard:[[button('Создать новый счёт','paymethod:cryptobot','primary')],[button('← Главное меню','home')]]}});else{const paymentUrl=invoice.bot_invoice_url||invoice.mini_app_invoice_url||invoice.web_app_invoice_url;await tgApi('editMessageText',{chat_id:q.message.chat.id,message_id:q.message.message_id,text:`<b>⏳ Оплата пока не найдена</b>\n\nСумма: ${money(invoice.amount)}\nОплата: USDT\nОплатите счёт и повторите проверку.`,parse_mode:'HTML',reply_markup:{inline_keyboard:[[linkButton('Оплатить в CryptoBot',paymentUrl,'primary')],[button('✅ Проверить ещё раз',`cryptocheck:${invoice.invoice_id}`,'success')],[button('← Главное меню','home')]]}})}}
+      else if(action.startsWith('topup:')){const [,method,amount]=action.split(':');if(method==='cryptobot'){const t=await startCryptoBotTopup(q.from,Number(amount));await tgApi('editMessageText',{chat_id:q.message.chat.id,message_id:q.message.message_id,text:`<b>Счёт CryptoBot создан</b>\n\nСумма: ${money(t.amount)}\nОплата: USDT\nПосле оплаты вернитесь сюда и нажмите «Проверить оплату».`,parse_mode:'HTML',reply_markup:{inline_keyboard:[[linkButton('Оплатить в CryptoBot',t.paymentUrl,'primary')],[button('✅ Проверить оплату',`cryptocheck:${t.cryptoPayInvoiceId}`,'success')],[button('← Главное меню','home')]]}})}else{const t=requestTopup(q.from,Number(amount),method);await tgApi('editMessageText',{chat_id:q.message.chat.id,message_id:q.message.message_id,text:`✅ Заявка на ${money(t.amount)} через ${paymentLabel(method)} создана.\nАдминистратор пришлёт реквизиты и подтвердит оплату.`,reply_markup:{inline_keyboard:[[{text:'🛟 Написать в поддержку',callback_data:'support'}],[{text:'‹ В меню',callback_data:'home'}]]}});for(const a of config.admins)await notify(a,`💳 Заявка ${method} на ${money(t.amount)} · пользователь ${q.from.id}`);if(config.adminChatId)await notify(config.adminChatId,`💳 Заявка ${method} на ${money(t.amount)} · пользователь ${q.from.id}`)}}
+      else if(action==='ticket_new'){const t=createTicket(q.from);if(config.adminChatId)await notify(config.adminChatId,`🎫 Создан тикет <b>#${t.id}</b> от ${html(t.userName)}.`);await show(q.message.chat.id,q.from,`ticket:${t.id}`,q.message.message_id)}
+      else if(action.startsWith('ticket_reply:')){pendingInput.set(q.from.id,{type:'ticket',id:action.slice(13)});await tgApi('sendMessage',{chat_id:q.message.chat.id,text:'✍️ Отправьте следующее сообщение — оно попадёт в тикет.'})}
+      else if(action.startsWith('ticket_close:')&&await hasAdminAccess(q.from.id)){closeTicket(q.from.id,action.slice(13));await show(q.message.chat.id,q.from,'admin_tickets',q.message.message_id)}
+      else if(action==='category_add'&&await hasAdminAccess(q.from.id)){pendingInput.set(q.from.id,{type:'category'});await tgApi('sendMessage',{chat_id:q.message.chat.id,text:'Введите название новой категории:'})}
+      else if(action.startsWith('category_toggle:')&&await hasAdminAccess(q.from.id)){toggleCategory(q.from.id,action.slice(16));await show(q.message.chat.id,q.from,'admin_categories',q.message.message_id)}
+      else if(action.startsWith('product_setcat:')&&await hasAdminAccess(q.from.id)){const [,pi,ci]=action.split(':');const a=adminView();setProductCategory(q.from.id,a.products[Number(pi)]?.id,a.categories[Number(ci)]?.id);await show(q.message.chat.id,q.from,`admin_product:${pi}`,q.message.message_id)}
+      else if(action.startsWith('price_edit:')&&await hasAdminAccess(q.from.id)){const p=adminView().products[Number(action.slice(11))];pendingInput.set(q.from.id,{type:'price',id:p?.id});await tgApi('sendMessage',{chat_id:q.message.chat.id,text:'Введите новую цену числом в рублях:'})}
+      else if(action.startsWith('codes_add:')&&await hasAdminAccess(q.from.id)){const p=adminView().products[Number(action.slice(10))];pendingInput.set(q.from.id,{type:'codes',id:p?.id});await tgApi('sendMessage',{chat_id:q.message.chat.id,text:'Отправьте коды активации: один код на строку. Логины и пароли не принимаются.'})}
+      else if(action.startsWith('approve:')&&await hasAdminAccess(q.from.id)){const t=approveTopup(q.from.id,action.slice(8));await notify(t.userId,`✅ Баланс пополнен на <b>${money(t.amount)}</b>.`);await show(q.message.chat.id,q.from,'admin_topups',q.message.message_id)}
+      else if(action!=='noop')await show(q.message.chat.id,q.from,action,q.message.message_id)
+    }catch(e){await tgApi('sendMessage',{chat_id:q.message.chat.id,text:`Ошибка: ${html(e.message)}`})}}
   }}catch(e){console.error('Telegram polling error:',e.message)}setTimeout(()=>botLoop(offset),1000)}
 server.listen(config.port,()=>console.log(`NAREVO MAIL: http://localhost:${config.port}`));botLoop();
