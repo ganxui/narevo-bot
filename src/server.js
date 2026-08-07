@@ -35,7 +35,65 @@ const server=http.createServer(async(req,res)=>{try{
 }catch(e){json(res,e.message.includes('Telegram')?401:400,{error:e.message})}});
 
 const transientMessages=new Map();
-const tgApi=async(method,payload)=>{const request=(name,data)=>fetch(`https://api.telegram.org/bot${config.token}/${name}`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(data)});const response=await request(method,payload);if(method==='editMessageText'&&!response.ok)return request('editMessageCaption',{...payload,caption:payload.text,text:undefined});if(method==='editMessageMedia'&&!response.ok)return request('editMessageCaption',{chat_id:payload.chat_id,message_id:payload.message_id,caption:payload.media.caption,parse_mode:payload.media.parse_mode,reply_markup:payload.reply_markup});if(method==='sendMessage'&&response.ok&&/^(Введите|Отправьте|✍️)/.test(payload.text||'')){const data=await response.clone().json();transientMessages.set(payload.chat_id,data.result.message_id)}if(method==='sendMessage'&&response.ok&&/^✅ (Сохранено|Заявка)/.test(payload.text||'')){const data=await response.clone().json();const uiId=getUiMessage(payload.chat_id);if(uiId){await request('deleteMessage',{chat_id:payload.chat_id,message_id:uiId});setUiMessage(payload.chat_id,null)}setTimeout(()=>request('deleteMessage',{chat_id:payload.chat_id,message_id:data.result.message_id}),4000)}return response};
+
+async function logTelegramError(method,response){
+  if(response.ok)return;
+  try{
+    const data=await response.clone().json();
+    console.error(`[Telegram API] ${method}: ${data.description||`HTTP ${response.status}`}`);
+  }catch{
+    console.error(`[Telegram API] ${method}: HTTP ${response.status}`);
+  }
+}
+
+const tgApi=async(method,payload)=>{
+  const request=(name,data)=>fetch(`https://api.telegram.org/bot${config.token}/${name}`,{
+    method:'POST',
+    headers:{'content-type':'application/json'},
+    body:JSON.stringify(data)
+  });
+
+  let response=await request(method,payload);
+
+  if(method==='editMessageText'&&!response.ok){
+    response=await request('editMessageCaption',{
+      chat_id:payload.chat_id,
+      message_id:payload.message_id,
+      caption:payload.text,
+      parse_mode:payload.parse_mode,
+      reply_markup:payload.reply_markup
+    });
+  }
+
+  if(method==='editMessageMedia'&&!response.ok){
+    response=await request('editMessageCaption',{
+      chat_id:payload.chat_id,
+      message_id:payload.message_id,
+      caption:payload.media.caption,
+      parse_mode:payload.media.parse_mode,
+      reply_markup:payload.reply_markup
+    });
+  }
+
+  await logTelegramError(method,response);
+
+  if(method==='sendMessage'&&response.ok&&/^(Введите|Отправьте|✍️)/.test(payload.text||'')){
+    const data=await response.clone().json();
+    transientMessages.set(payload.chat_id,data.result.message_id);
+  }
+
+  if(method==='sendMessage'&&response.ok&&/^✅ (Сохранено|Заявка)/.test(payload.text||'')){
+    const data=await response.clone().json();
+    const uiId=getUiMessage(payload.chat_id);
+    if(uiId){
+      await request('deleteMessage',{chat_id:payload.chat_id,message_id:uiId});
+      setUiMessage(payload.chat_id,null);
+    }
+    setTimeout(()=>request('deleteMessage',{chat_id:payload.chat_id,message_id:data.result.message_id}),4000);
+  }
+
+  return response;
+};
 const money=n=>`${Number(n).toLocaleString('ru-RU')} ₽`;
 const html=value=>String(value??'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 const button=(text,callback_data,style,icon_custom_emoji_id)=>({text,callback_data,...(style?{style}:{}),...(icon_custom_emoji_id?{icon_custom_emoji_id}:{})});
@@ -71,6 +129,70 @@ const imageForSection=section=>{let name='catalog';if(section==='home')return co
 async function startCryptoBotTopup(user,amount){if(!cryptoPayReady(config))throw Error('CryptoBot пока не настроен');const topup=requestTopup(user,amount,'cryptobot');try{const invoice=await createCryptoPayInvoice(config,{amount:topup.amount,userId:user.id,topupId:topup.id});return attachCryptoPayInvoice(topup.id,invoice.invoiceId,invoice.paymentUrl)}catch(e){failTopup(topup.id,e.message);throw e}}
 async function startHeleketTopup(user,amount){if(!heleketReady(config))throw Error('Heleket пока не настроен');const topup=requestTopup(user,amount,'heleket');try{const invoice=await createHeleketInvoice(config,{amount:topup.amount,topupId:topup.id});return attachHeleketInvoice(topup.id,invoice.invoiceId,invoice.paymentUrl)}catch(e){failTopup(topup.id,e.message);throw e}}
 const heleketKeyboard=(invoiceId,paymentUrl,repeat=false)=>({inline_keyboard:[...(paymentUrl?[[linkButton('Оплатить через Heleket',paymentUrl,'primary')]]:[]),[button(repeat?'✅ Проверить ещё раз':'✅ Проверить оплату',`heleketcheck:${invoiceId}`,'success')],[button('← Главное меню','home')]]});
+
+async function requireTelegramOk(response,fallbackMessage='Telegram API вернул ошибку'){
+  if(response.ok)return response;
+  let message=fallbackMessage;
+  try{
+    const data=await response.clone().json();
+    if(data.description)message=data.description;
+  }catch{}
+  throw Error(message);
+}
+
+async function replaceUiWithText(chatId,messageId,text,reply_markup){
+  const currentId=messageId||getUiMessage(chatId);
+
+  if(currentId){
+    await tgApi('deleteMessage',{
+      chat_id:chatId,
+      message_id:currentId
+    });
+  }
+
+  setUiMessage(chatId,null);
+
+  const response=await tgApi('sendMessage',{
+    chat_id:chatId,
+    text,
+    parse_mode:'HTML',
+    reply_markup
+  });
+
+  await requireTelegramOk(response,'Не удалось показать текстовый экран');
+
+  const sent=await response.clone().json();
+  setUiMessage(chatId,sent.result.message_id);
+  return sent.result.message_id;
+}
+
+async function replaceUiWithHome(chatId,user,messageId){
+  const currentId=messageId||getUiMessage(chatId);
+
+  if(currentId){
+    await tgApi('deleteMessage',{
+      chat_id:chatId,
+      message_id:currentId
+    });
+  }
+
+  setUiMessage(chatId,null);
+
+  const admin=await hasAdminAccess(user.id);
+  const response=await tgApi('sendPhoto',{
+    chat_id:chatId,
+    photo:config.productImageUrl,
+    caption:'<b>NAREVO MAIL</b>\nЦифровые коды подписок.\n\nВыберите раздел:',
+    parse_mode:'HTML',
+    reply_markup:menu(user,admin)
+  });
+
+  await requireTelegramOk(response,'Не удалось открыть главное меню');
+
+  const sent=await response.clone().json();
+  setUiMessage(chatId,sent.result.message_id);
+  return sent.result.message_id;
+}
 async function hasAdminAccess(userId){if(config.admins.has(userId))return true;if(!config.adminChatId)return false;try{const r=await tgApi('getChatMember',{chat_id:config.adminChatId,user_id:userId});const d=await r.json();return d.ok&&['creator','administrator'].includes(d.result.status)}catch{return false}}
 
 function getPrivacyPolicy() {
@@ -224,8 +346,8 @@ function getTermsOfService() {
 Используя Сервис (в том числе запуская бота и/или вводя команду /start), Пользователь подтверждает, что ознакомлен с настоящим Соглашением и принимает его условия в полном объёме.`;
 }
 
-async function showWelcome(chatId, user, messageId) {
-  const text = `👋 <b>Добро пожаловать в NAREVO MAIL!</b>
+async function showWelcome(chatId,user,messageId){
+  const text=`👋 <b>Добро пожаловать в NAREVO MAIL!</b>
 
 Перед началом использования бота, пожалуйста, ознакомьтесь с документами:
 
@@ -235,31 +357,44 @@ async function showWelcome(chatId, user, messageId) {
 Нажимайте на кнопки, чтобы прочитать документы.
 После ознакомления нажмите <b>«Подтверждаю»</b> для доступа в магазин.`;
 
-  const reply_markup = welcomeMenu();
-  
-  if (messageId) {
-    await tgApi('editMessageText', {
-      chat_id: chatId,
-      message_id: messageId,
-      text: text,
-      parse_mode: 'HTML',
-      reply_markup: reply_markup
-    });
-  } else {
-    const response = await tgApi('sendMessage', {
-      chat_id: chatId,
-      text: text,
-      parse_mode: 'HTML',
-      reply_markup: reply_markup
-    });
-    if (response.ok) {
-      const sent = await response.clone().json();
-      setUiMessage(chatId, sent.result.message_id);
-    }
-  }
+  await replaceUiWithText(chatId,messageId,text,welcomeMenu());
 }
 
-async function show(chatId,user,section,messageId){const data=userView(user);const admin=await hasAdminAccess(user.id);let text='';let keyboard=[];
+async function show(chatId,user,section,messageId){
+  if(section==='home'){
+    await replaceUiWithHome(chatId,user,messageId);
+    return;
+  }
+
+  if(section==='privacy'){
+    await replaceUiWithText(
+      chatId,
+      messageId,
+      getPrivacyPolicy(),
+      {inline_keyboard:[[button('← Назад',hasUserAgreed(user.id)?'home':'welcome')]]}
+    );
+    return;
+  }
+
+  if(section==='terms'){
+    await replaceUiWithText(
+      chatId,
+      messageId,
+      getTermsOfService(),
+      {inline_keyboard:[[button('← Назад',hasUserAgreed(user.id)?'home':'welcome')]]}
+    );
+    return;
+  }
+
+  if(section==='welcome'){
+    await showWelcome(chatId,user,messageId);
+    return;
+  }
+
+  const data=userView(user);
+  const admin=await hasAdminAccess(user.id);
+  let text='';
+  let keyboard=[];
   if(section==='catalog'){text='<b>🛍 Каталог</b>\n\nВыберите раздел, чтобы посмотреть товары:';keyboard=data.categories.map((c,i)=>[button(`📁 ${c.title}  ›`,`category:${i}`)]);keyboard.push([button('← Главное меню','home')]);}
   else if(section.startsWith('category:')){const category=data.categories[Number(section.slice(9))];if(!category)return;const items=data.products.filter(p=>p.categoryId===category.id);text=`<b>📁 ${html(category.title)}</b>\n\n${items.length?'Выберите товар:':'В этом разделе пока нет товаров.'}`;keyboard=items.map(p=>[button(`📦 ${p.title} · ${money(p.price)} · ${p.stock} шт.`,`product:${p.id}`)]);keyboard.push([button('← Все разделы','catalog')]);}
   else if(section.startsWith('product:')){const p=data.products.find(x=>x.id===section.slice(8));if(!p)return;const categoryIndex=data.categories.findIndex(c=>c.id===p.categoryId);text=`<b>📦 ${html(p.title)}</b>\n${html(p.term)}\n\n${html(p.description)}\n\nЦена: <b>${money(p.price)}</b>\nДоступно: <b>${p.stock}</b>`;keyboard=[[button(p.stock?'🛒 Купить':'Нет в наличии',p.stock?`buy:${p.id}`:'noop',p.stock?'primary':undefined)],[button('← К товарам',`category:${Math.max(0,categoryIndex)}`)]];}
@@ -276,9 +411,6 @@ async function show(chatId,user,section,messageId){const data=userView(user);con
   else if(section==='crypto_payments'){const icons=paymentEmojis();text='<b>🪙 Криптовалюта</b>\n\nКомиссия: <b>0%</b>\nДоступные способы: USDT (CryptoBot) и другие криптовалюты через Heleket.\nМинимальная сумма: 50 ₽';keyboard=[[paymentButton('CryptoBot · USDT','💎','paymethod:cryptobot','primary',icons.cryptoBot)],[paymentButton('Crypto · Heleket','🔥','paymethod:heleket','danger',icons.heleket)],[button('← Назад','topup')]];}
   else if(section.startsWith('paymethod:')){const method=section.slice(10);const label=paymentLabel(method);text=`<b>${label}</b>\n\nВыберите сумму пополнения:`;keyboard=[[500,1000,2000].map(x=>button(money(x),`topup:${method}:${x}`,'primary')),[button('✏️ Ввести свою сумму',`topup_custom:${method}`)],[button('← Назад',section==='fiat_payments'?'fiat_payments':'crypto_payments')]];}
   else if(section.startsWith('topup_custom:')){const method=section.slice(13);pendingInput.set(user.id,{type:'topup_custom',method});text=`<b>✏️ Своя сумма · ${paymentLabel(method)}</b>\n\nВведите сумму от 50 до 100 000 ₽ одним сообщением.`;keyboard=[[button('Отмена','topup')]];}
-  else if(section==='privacy'){text=getPrivacyPolicy();keyboard=[[button('← Назад', hasUserAgreed(user.id) ? 'home' : 'welcome')]];}
-  else if(section==='terms'){text=getTermsOfService();keyboard=[[button('← Назад', hasUserAgreed(user.id) ? 'home' : 'welcome')]];}
-  else if(section==='welcome'){await showWelcome(chatId, user, messageId);return;}
   else if(section==='rules'){text='<b>📜 Правила NAREVO MAIL</b>\n\nЗдесь собраны основные условия работы магазина. Выберите нужный раздел:';keyboard=[[button('🔐 Конфиденциальность','rule:privacy')],[button('🛍 Покупка и выдача','rule:purchase')],[button('↩️ Возвраты','rule:refund')],[button('💬 Поддержка','rule:support')],[button('← Главное меню','home')]];}
   else if(section==='rule:privacy'){text='<b>🔐 Конфиденциальность</b>\n\nБот хранит только данные, необходимые для работы: Telegram ID, имя, историю покупок, пополнений и обращений в поддержку.\n\nПлатёжные данные и пароли от сторонних сервисов бот не запрашивает и не хранит. Коды товаров хранятся в зашифрованном виде. Данные не передаются посторонним, кроме случаев, необходимых для оплаты, работы сервиса или предусмотренных законом.';keyboard=[[button('← Ко всем правилам','rules')]];}
   else if(section==='rule:purchase'){text='<b>🛍 Правила покупки</b>\n\nПеред оплатой внимательно проверьте название товара, срок подписки, регион активации, цену и описание.\n\nПосле подтверждения покупки с баланса списывается указанная сумма, а цифровой код появляется в разделе «Покупки». Код предназначен только для выбранного товара. Передавать его другим людям после получения небезопасно.';keyboard=[[button('← Ко всем правилам','rules')]];}
@@ -301,25 +433,15 @@ async function show(chatId,user,section,messageId){const data=userView(user);con
   else{text='<b>NAREVO MAIL</b>\nОфициальные цифровые коды подписок.\n\nВыберите раздел:';keyboard=menu(user,admin).inline_keyboard;}
   
   const reply_markup={inline_keyboard:keyboard};
-  const isTextOnly = section === 'privacy' || section === 'terms' || section === 'welcome' || section === 'home';
-  
+
   if(messageId){
-    if(isTextOnly) {
-      await tgApi('editMessageText',{
-        chat_id:chatId,
-        message_id:messageId,
-        text:text,
-        parse_mode:'HTML',
-        reply_markup
-      });
-    } else {
-      await tgApi('editMessageMedia',{
-        chat_id:chatId,
-        message_id:messageId,
-        media:{type:'photo',media:imageForSection(section),caption:text,parse_mode:'HTML'},
-        reply_markup
-      });
-    }
+    const response=await tgApi('editMessageMedia',{
+      chat_id:chatId,
+      message_id:messageId,
+      media:{type:'photo',media:imageForSection(section),caption:text,parse_mode:'HTML'},
+      reply_markup
+    });
+    await requireTelegramOk(response,'Не удалось обновить раздел');
   } else {
     const response=await tgApi('sendPhoto',{
       chat_id:chatId,
@@ -328,10 +450,9 @@ async function show(chatId,user,section,messageId){const data=userView(user);con
       parse_mode:'HTML',
       reply_markup
     });
-    if(response.ok){
-      const sent=await response.clone().json();
-      setUiMessage(chatId,sent.result.message_id);
-    }
+    await requireTelegramOk(response,'Не удалось открыть раздел');
+    const sent=await response.clone().json();
+    setUiMessage(chatId,sent.result.message_id);
   }
 }
 
