@@ -62,44 +62,156 @@ async function startCryptoBotTopup(user,amount){if(!cryptoPayReady(config))throw
 async function startHeleketTopup(user,amount){if(!heleketReady(config))throw Error('Heleket пока не настроен');const topup=requestTopup(user,amount,'heleket');try{const invoice=await createHeleketInvoice(config,{amount:topup.amount,topupId:topup.id});return attachHeleketInvoice(topup.id,invoice.invoiceId,invoice.paymentUrl)}catch(e){failTopup(topup.id,e.message);throw e}}
 const heleketKeyboard=(invoiceId,paymentUrl,repeat=false)=>({inline_keyboard:[...(paymentUrl?[[linkButton('Оплатить через Heleket',paymentUrl,'primary')]]:[]),[button(repeat?'✅ Проверить ещё раз':'✅ Проверить оплату',`heleketcheck:${invoiceId}`,'success')],[button('← Главное меню','home')]]});
 async function hasAdminAccess(userId){if(config.admins.has(userId))return true;if(!config.adminChatId)return false;try{const r=await tgApi('getChatMember',{chat_id:config.adminChatId,user_id:userId});const d=await r.json();return d.ok&&['creator','administrator'].includes(d.result.status)}catch{return false}}
+
 function getPrivacyPolicy() {
-  return `🔒 <b>Политика конфиденциальности NAREVO</b>
+  return `🔒 <b>Политика конфиденциальности NAREVO MAIL</b>
 
-📌 <b>Мы собираем только:</b>
-• Ваш Telegram ID
-• Имя пользователя
-• Историю покупок и пополнений
-• Обращения в поддержку
+📅 Актуальная версия: 07.08.2026
 
-❌ <b>Мы НЕ храним:</b>
-• Пароли от сторонних сервисов
-• Данные банковских карт
-• Логины и пароли аккаунтов
+<b>1. Общие положения</b>
 
-🛡 Все коды хранятся в зашифрованном виде.
-Данные не передаются третьим лицам.
+1.1. Настоящая Политика конфиденциальности регулирует порядок обработки и защиты информации, которую Пользователь передаёт при использовании сервиса NAREVO MAIL (Telegram-бот @narevojournal).
 
-📅 Дата: 07.08.2026
+1.2. Используя Сервис, Пользователь подтверждает своё согласие с условиями Политики. Если Пользователь не согласен с условиями — он обязан прекратить использование Сервиса.
 
-Подробнее: https://telegra.ph/Politika-konfidencialnosti-08-01-83`;
+<b>2. Сбор информации</b>
+
+2.1. Сервис может собирать следующие типы данных:
+• идентификаторы аккаунта (Telegram ID, имя пользователя);
+• техническую информацию (данные о браузере, устройстве);
+• историю взаимодействий с Сервисом.
+
+2.2. Сервис не требует от Пользователя предоставления паспортных данных, документов, фотографий или другой личной информации, кроме минимально необходимой для работы.
+
+<b>3. Использование информации</b>
+
+3.1. Сервис использует полученную информацию исключительно для:
+• обеспечения работы функционала;
+• связи с Пользователем (уведомления и поддержка);
+• анализа и улучшения работы Сервиса.
+
+<b>4. Передача информации третьим лицам</b>
+
+4.1. Администрация не передаёт полученные данные третьим лицам, за исключением случаев:
+• если это требуется по закону;
+• если это необходимо для исполнения обязательств перед Пользователем (например, при работе с платёжными системами);
+• если Пользователь сам дал на это согласие.
+
+<b>5. Хранение и защита данных</b>
+
+5.1. Данные хранятся в течение срока, необходимого для достижения целей обработки.
+
+5.2. Администрация принимает разумные меры для защиты данных, но не гарантирует абсолютную безопасность информации при передаче через интернет.
+
+<b>6. Отказ от ответственности</b>
+
+6.1. Пользователь понимает и соглашается, что передача информации через интернет всегда сопряжена с рисками.
+
+6.2. Администрация не несёт ответственности за утрату, кражу или раскрытие данных, если это произошло по вине третьих лиц или самого Пользователя.
+
+<b>7. Изменения в Политике</b>
+
+7.1. Администрация вправе изменять условия Политики без предварительного уведомления.
+
+7.2. Продолжение использования Сервиса после внесения изменений означает согласие Пользователя с новой редакцией Политики.
+
+<b>8. Контактная информация</b>
+
+8.1. По всем вопросам, связанным с Политикой конфиденциальности, Пользователь может обратиться:
+• Email: narevojournal@proton.me
+• Telegram: @narevojournal`;
 }
 
 function getTermsOfService() {
-  return `📋 <b>Пользовательское соглашение NAREVO</b>
+  return `📋 <b>Пользовательское соглашение NAREVO MAIL</b>
 
-✅ <b>Условия покупки:</b>
-• Товары цифровые и возврату не подлежат
-• Код активации выдается мгновенно после оплаты
-• Цена фиксирована и указана до покупки
+📅 Актуальная версия: 07.08.2026
 
-↩️ <b>Возврат возможен только в случае:</b>
-• Неверный код активации
-• Код уже был использован
-• Товар не соответствует описанию
+<b>1. Общие положения</b>
 
-📅 Дата: 07.08.2026
+1.1. Настоящее Пользовательское соглашение регулирует порядок использования онлайн-сервиса NAREVO MAIL (Telegram-бот @narevojournal), предоставляемого Администрацией.
 
-Подробнее: https://telegra.ph/Polzovatelskoe-soglashenie-08-01-39`;
+1.2. Используя Сервис, включая запуск бота, регистрацию, оплату услуг или получение доступа к материалам, Пользователь подтверждает, что полностью ознакомился с условиями настоящего Соглашения и принимает их в полном объёме.
+
+1.3. В случае несогласия с условиями Соглашения Пользователь обязан прекратить использование Сервиса.
+
+<b>2. Характер услуг и цифровых товаров</b>
+
+2.1. Сервис предоставляет цифровые товары и услуги нематериального характера — официальные цифровые коды подписок.
+
+2.2. Пользователь осознаёт и соглашается, что ценность цифровых товаров Сервиса заключается в систематизации, анализе, форме подачи, сопровождении и поддержке.
+
+2.3. Сервис не заявляет и не гарантирует уникальность, исключительность или недоступность отдельных элементов материалов вне Сервиса.
+
+<b>3. Отказ от гарантий и ответственности</b>
+
+3.1. Сервис предоставляется на условиях «AS IS» («как есть»).
+
+3.2. Администрация не гарантирует:
+• соответствие Сервиса ожиданиям Пользователя;
+• достижение каких-либо финансовых, коммерческих, профессиональных или иных результатов;
+• бесперебойную и безошибочную работу Сервиса.
+
+3.3. Администрация не несёт ответственности за:
+• любые прямые или косвенные убытки, включая упущенную выгоду;
+• последствия применения Пользователем полученных материалов;
+• действия или бездействие третьих лиц;
+• временные технические сбои и ограничения доступа.
+
+<b>4. Законность использования</b>
+
+4.1. Сервис не предназначен для поощрения, организации или содействия противоправной деятельности.
+
+4.2. Пользователь обязуется использовать Сервис исключительно в рамках применимого законодательства.
+
+<b>5. Интеллектуальная собственность</b>
+
+5.1. Все материалы, размещённые в Сервисе, охраняются законодательством об интеллектуальной собственности.
+
+5.2. Пользователю запрещается копировать, распространять, перепродавать, передавать третьим лицам или иным образом использовать материалы Сервиса без разрешения правообладателя.
+
+<b>6. Ограничение доступа</b>
+
+6.1. Администрация вправе приостановить или ограничить доступ Пользователя к Сервису в случае:
+• нарушения условий настоящего Соглашения;
+• выявления злоупотреблений;
+• требований законодательства или платёжных провайдеров.
+
+<b>7. Платежи и возвраты</b>
+
+7.1. Оплата услуг и цифровых товаров производится на условиях, указанных в Сервисе до момента оплаты.
+
+7.2. В связи с нематериальным характером цифровых товаров и услуг, возврат денежных средств после предоставления доступа не осуществляется, за исключением случаев, указанных ниже.
+
+7.3. Возврат средств возможен только если:
+• услуга не была оказана по технической вине Сервиса;
+• доступ к цифровому товару фактически не был предоставлен.
+
+7.4. Для рассмотрения вопроса о возврате Пользователь обязан обратиться в службу поддержки в течение 24 часов с момента оплаты.
+
+7.5. Решение о возврате принимается Администрацией индивидуально.
+
+<b>8. Конфиденциальность</b>
+
+8.1. Администрация собирает минимально необходимые технические данные для обеспечения работы Сервиса согласно Политике конфиденциальности.
+
+8.2. Администрация принимает разумные меры для защиты данных, однако не гарантирует абсолютную безопасность передаваемой информации.
+
+<b>9. Изменение условий</b>
+
+9.1. Администрация вправе вносить изменения в настоящее Соглашение.
+
+9.2. Актуальная версия Соглашения публикуется в Сервисе.
+
+9.3. Продолжение использования Сервиса означает согласие Пользователя с обновлёнными условиями.
+
+<b>10. Контактная информация</b>
+
+10.1. По всем вопросам Пользователь может обратиться:
+• Email: narevojournal@proton.me
+• Telegram: @narevojournal
+
+Используя Сервис (в том числе запуская бота и/или вводя команду /start), Пользователь подтверждает, что ознакомлен с настоящим Соглашением и принимает его условия в полном объёме.`;
 }
 
 async function show(chatId,user,section,messageId){const data=userView(user);const admin=await hasAdminAccess(user.id);let text='';let keyboard=[];
@@ -121,14 +233,14 @@ async function show(chatId,user,section,messageId){const data=userView(user);con
   else if(section.startsWith('topup_custom:')){const method=section.slice(13);pendingInput.set(user.id,{type:'topup_custom',method});text=`<b>✏️ Своя сумма · ${paymentLabel(method)}</b>\n\nВведите сумму от 50 до 100 000 ₽ одним сообщением.`;keyboard=[[button('Отмена','topup')]];}
   else if(section==='privacy'){text=getPrivacyPolicy();keyboard=[[button('← В меню','home')]];}
   else if(section==='terms'){text=getTermsOfService();keyboard=[[button('← В меню','home')]];}
-  else if(section==='rules'){text='<b>📜 Правила NAREVO</b>\n\nЗдесь собраны основные условия работы магазина. Выберите нужный раздел:';keyboard=[[button('🔐 Конфиденциальность','rule:privacy')],[button('🛍 Покупка и выдача','rule:purchase')],[button('↩️ Возвраты','rule:refund')],[button('💬 Поддержка','rule:support')],[button('← Главное меню','home')]];}
+  else if(section==='rules'){text='<b>📜 Правила NAREVO MAIL</b>\n\nЗдесь собраны основные условия работы магазина. Выберите нужный раздел:';keyboard=[[button('🔐 Конфиденциальность','rule:privacy')],[button('🛍 Покупка и выдача','rule:purchase')],[button('↩️ Возвраты','rule:refund')],[button('💬 Поддержка','rule:support')],[button('← Главное меню','home')]];}
   else if(section==='rule:privacy'){text='<b>🔐 Конфиденциальность</b>\n\nБот хранит только данные, необходимые для работы: Telegram ID, имя, историю покупок, пополнений и обращений в поддержку.\n\nПлатёжные данные и пароли от сторонних сервисов бот не запрашивает и не хранит. Коды товаров хранятся в зашифрованном виде. Данные не передаются посторонним, кроме случаев, необходимых для оплаты, работы сервиса или предусмотренных законом.';keyboard=[[button('← Ко всем правилам','rules')]];}
   else if(section==='rule:purchase'){text='<b>🛍 Правила покупки</b>\n\nПеред оплатой внимательно проверьте название товара, срок подписки, регион активации, цену и описание.\n\nПосле подтверждения покупки с баланса списывается указанная сумма, а цифровой код появляется в разделе «Покупки». Код предназначен только для выбранного товара. Передавать его другим людям после получения небезопасно.';keyboard=[[button('← Ко всем правилам','rules')]];}
   else if(section==='rule:refund'){text='<b>↩️ Правила возврата</b>\n\nЕсли код не работает, не соответствует описанию или не был выдан, создайте тикет в поддержке и укажите номер покупки.\n\nПосле проверки мы заменим неисправный код или вернём средства на баланс. Использованный или успешно активированный код вернуть нельзя. Возврат также не выполняется при ошибочном выборе товара или региона, если правильная информация была указана до покупки.';keyboard=[[button('💬 Обратиться в поддержку','support','primary')],[button('← Ко всем правилам','rules')]];}
   else if(section==='rule:support'){text='<b>💬 Правила поддержки</b>\n\nОдин пользователь может иметь один открытый тикет. Опишите проблему одним сообщением и приложите номер покупки.\n\nНе отправляйте пароли, данные банковской карты и коды подтверждения. Общайтесь спокойно и не создавайте повторные тикеты по одному вопросу. Ответ администратора появится внутри тикета.';keyboard=[[button('Создать или открыть тикет','support','primary')],[button('← Ко всем правилам','rules')]];}
-  else if(section==='support'){const open=data.tickets.find(t=>t.status==='open');text='<b>💬 Поддержка NAREVO</b>\n\n'+(open?`У вас есть открытый тикет <code>#${open.id}</code>.`:'Создайте тикет — администратор ответит прямо здесь.')+'\n\n📧 Email: support@narevo.com';keyboard=[[button(open?'Открыть тикет':'Создать тикет',open?`ticket:${open.id}`:'ticket_new','primary')],[button('Назад в меню','home')]];}
+  else if(section==='support'){const open=data.tickets.find(t=>t.status==='open');text='<b>💬 Поддержка NAREVO MAIL</b>\n\n'+(open?`У вас есть открытый тикет <code>#${open.id}</code>.`:'Создайте тикет — администратор ответит прямо здесь.')+'\n\n📧 Email: narevojournal@proton.me\n📱 Telegram: @narevojournal';keyboard=[[button(open?'Открыть тикет':'Создать тикет',open?`ticket:${open.id}`:'ticket_new','primary')],[button('Назад в меню','home')]];}
   else if(section.startsWith('ticket:')){const id=section.slice(7);const t=(admin?adminView().tickets:data.tickets).find(x=>x.id===id);if(!t)return;const messages=t.messages.slice(-5).map(m=>`${m.author==='admin'?'Администратор':m.author==='user'?'Клиент':'Система'}: ${html(m.text).slice(0,180)}`).join('\n\n');text=`<b>Тикет #${t.id}</b> · ${t.status==='open'?'Открыт':'Закрыт'}\n\n${messages}`;keyboard=t.status==='open'?[[button('Написать',`ticket_reply:${t.id}`,'primary')],...(admin?[[button('Закрыть тикет',`ticket_close:${t.id}`,'danger')]]:[]),[button('Назад',admin?'admin_tickets':'support')]]:[[button('Назад',admin?'admin_tickets':'support')]];}
-  else if(section==='admin'&&admin){const a=adminView();text=`<b>NAREVO · Админ-панель</b>\n\nПользователей: ${a.users.length}\nЗаказов: ${a.orders.length}\nЗаявок: ${a.topups.filter(x=>x.status==='pending').length}\nТикетов: ${a.tickets.filter(x=>x.status==='open').length}`;keyboard=[[{text:'🎫 Тикеты',callback_data:'admin_tickets'},{text:'💳 Пополнения',callback_data:'admin_topups'}],[{text:'📁 Категории',callback_data:'admin_categories'},{text:'📦 Товары и цены',callback_data:'admin_products'}],[{text:'📊 Остатки',callback_data:'admin_stock'}],[{text:'‹ В меню',callback_data:'home'}]];}
+  else if(section==='admin'&&admin){const a=adminView();text=`<b>NAREVO MAIL · Админ-панель</b>\n\nПользователей: ${a.users.length}\nЗаказов: ${a.orders.length}\nЗаявок: ${a.topups.filter(x=>x.status==='pending').length}\nТикетов: ${a.tickets.filter(x=>x.status==='open').length}`;keyboard=[[{text:'🎫 Тикеты',callback_data:'admin_tickets'},{text:'💳 Пополнения',callback_data:'admin_topups'}],[{text:'📁 Категории',callback_data:'admin_categories'},{text:'📦 Товары и цены',callback_data:'admin_products'}],[{text:'📊 Остатки',callback_data:'admin_stock'}],[{text:'‹ В меню',callback_data:'home'}]];}
   else if(section==='admin_tickets'&&admin){const tickets=adminView().tickets;text='<b>Тикеты поддержки</b>\n\nВыберите обращение:';keyboard=tickets.map(t=>[{text:`${t.status==='open'?'🟢':'⚫'} #${t.id} · ${t.userName}`,callback_data:`ticket:${t.id}`}]);keyboard.push([{text:'‹ В админ-панель',callback_data:'admin'}]);}
   else if(section==='admin_categories'&&admin){const cats=adminView().categories;text='<b>Категории</b>\n\nНажмите категорию, чтобы включить/скрыть:';keyboard=cats.map(c=>[{text:`${c.active?'🟢':'⚫'} ${c.title}`,callback_data:`category_toggle:${c.id}`}]);keyboard.push([{text:'➕ Новая категория',callback_data:'category_add'}],[{text:'‹ В админ-панель',callback_data:'admin'}]);}
   else if(section==='admin_products'&&admin){const products=adminView().products.filter(p=>p.active);text='<b>Товары и цены</b>\n\nВыберите товар:';keyboard=products.map((p,i)=>[{text:`${p.title} · ${money(p.price)}`,callback_data:`admin_product:${i}`}]);keyboard.push([{text:'➕ Добавить товар',callback_data:'product_add'}],[{text:'‹ В админ-панель',callback_data:'admin'}]);}
@@ -140,7 +252,7 @@ async function show(chatId,user,section,messageId){const data=userView(user);con
   else if(section==='product_add'&&admin){const cats=adminView().categories.filter(c=>c.active);text='<b>Новый товар</b>\n\nСначала выберите категорию:';keyboard=cats.map((c,i)=>[{text:c.title,callback_data:`product_addcat:${i}`}]);keyboard.push([{text:'‹ К товарам',callback_data:'admin_products'}]);}
   else if(section==='admin_topups'&&admin){const pending=adminView().topups.filter(x=>x.status==='pending'&&!x.cryptoPayInvoiceId&&!x.heleketInvoiceId);text='<b>Заявки на пополнение</b>\n\n'+(pending.length?pending.map(t=>`${paymentLabel(t.method)} · ID ${t.userId}\n${topupSummary(t)}`).join('\n\n'):'Новых заявок для ручного подтверждения нет.');keyboard=pending.map(t=>[{text:`${paymentLabel(t.method)} · оплатить ${money(t.paymentAmount??t.amount)}`,callback_data:`approve:${t.id}`}]);keyboard.push([{text:'‹ В админ-панель',callback_data:'admin'}]);}
   else if(section==='admin_stock'&&admin){const a=adminView();text='<b>Остатки товаров</b>\n\n'+a.products.map(p=>`${p.title}: <b>${p.stock}</b>`).join('\n')+'\n\nДля безопасной загрузки кодов используйте Mini App или API админ-панели.';keyboard=[[{text:'‹ В админ-панель',callback_data:'admin'}]];}
-  else{text='<b>NAREVO</b>\nОфициальные цифровые коды подписок.\n\nВыберите раздел:';keyboard=menu(user,admin).inline_keyboard;}
+  else{text='<b>NAREVO MAIL</b>\nОфициальные цифровые коды подписок.\n\nВыберите раздел:';keyboard=menu(user,admin).inline_keyboard;}
   const reply_markup={inline_keyboard:keyboard};if(messageId)await tgApi('editMessageMedia',{chat_id:chatId,message_id:messageId,media:{type:'photo',media:imageForSection(section),caption:text,parse_mode:'HTML'},reply_markup});else{const response=await tgApi('sendPhoto',{chat_id:chatId,photo:imageForSection(section),caption:text,parse_mode:'HTML',reply_markup});if(response.ok){const sent=await response.clone().json();setUiMessage(chatId,sent.result.message_id)}}
 }
 async function botLoop(offset=0){if(!config.token)return;try{const r=await fetch(`https://api.telegram.org/bot${config.token}/getUpdates?timeout=25&offset=${offset}`);const d=await r.json();for(const update of d.result||[]){offset=update.update_id+1;const m=update.message;const q=update.callback_query;
@@ -153,7 +265,7 @@ async function botLoop(offset=0){if(!config.token)return;try{const r=await fetch
     if(m?.text&&!m.text.startsWith('/')&&pendingInput.get(m.from.id)?.type==='topup_custom'&&pendingInput.get(m.from.id)?.method==='sbp'){
       try{const amount=Number(m.text.replace(/\s/g,''));const t=requestTopup(m.from,amount,'sbp');pendingInput.delete(m.from.id);await tgApi('sendMessage',{chat_id:m.chat.id,text:`<b>Заявка ${paymentLabel(t.method)} создана</b>\n\n${topupSummary(t)}\n\nАдминистратор пришлёт реквизиты и подтвердит оплату.`,parse_mode:'HTML'});for(const a of config.admins)await notify(a,`💳 ${paymentLabel(t.method)} · к оплате ${money(t.paymentAmount)} · на баланс ${money(t.amount)} · пользователь ${m.from.id}`);if(config.adminChatId)await notify(config.adminChatId,`💳 ${paymentLabel(t.method)} · к оплате ${money(t.paymentAmount)} · на баланс ${money(t.amount)} · пользователь ${m.from.id}`);}catch(e){await tgApi('sendMessage',{chat_id:m.chat.id,text:`Введите сумму ещё раз. ${html(e.message)}`});}continue;
     }
-    if(m?.text==='/start'||m?.text==='/menu'){const oldId=getUiMessage(m.chat.id);if(oldId)await tgApi('deleteMessage',{chat_id:m.chat.id,message_id:oldId});await installQuickMenu(m.chat.id);const admin=await hasAdminAccess(m.from.id);const response=await tgApi('sendPhoto',{chat_id:m.chat.id,photo:config.productImageUrl,caption:'<b>NAREVO</b>\nЦифровые коды подписок.\n\nВыберите раздел:',parse_mode:'HTML',reply_markup:menu(m.from,admin)});if(response.ok){const sent=await response.clone().json();setUiMessage(m.chat.id,sent.result.message_id)}}
+    if(m?.text==='/start'||m?.text==='/menu'){const oldId=getUiMessage(m.chat.id);if(oldId)await tgApi('deleteMessage',{chat_id:m.chat.id,message_id:oldId});await installQuickMenu(m.chat.id);const admin=await hasAdminAccess(m.from.id);const response=await tgApi('sendPhoto',{chat_id:m.chat.id,photo:config.productImageUrl,caption:'<b>NAREVO MAIL</b>\nЦифровые коды подписок.\n\nВыберите раздел:',parse_mode:'HTML',reply_markup:menu(m.from,admin)});if(response.ok){const sent=await response.clone().json();setUiMessage(m.chat.id,sent.result.message_id)}}
     else if(m?.text==='/id')await tgApi('sendMessage',{chat_id:m.chat.id,text:`Ваш Telegram ID: <code>${m.from.id}</code>`,parse_mode:'HTML'});
     else if(m?.text==='/chatid'&&['group','supergroup'].includes(m.chat.type))await tgApi('sendMessage',{chat_id:m.chat.id,text:`ID служебного чата: <code>${m.chat.id}</code>`,parse_mode:'HTML'});
     else if(m?.text==='/emoji'&&await hasAdminAccess(m.from.id)){pendingInput.set(m.from.id,{type:'button_emojis'});await tgApi('sendMessage',{chat_id:m.chat.id,text:'Отправьте <b>одним сообщением три премиум-эмодзи</b> в таком порядке:\n\n1. CryptoBot\n2. Heleket\n3. СБП\n\nМожно просто поставить их подряд через пробел.',parse_mode:'HTML'});}
@@ -174,4 +286,4 @@ async function botLoop(offset=0){if(!config.token)return;try{const r=await fetch
     if(q&&(q.data.startsWith('topup:heleket:')||q.data.startsWith('heleketcheck:'))){await tgApi('answerCallbackQuery',{callback_query_id:q.id});try{if(q.data.startsWith('topup:heleket:')){const amount=Number(q.data.slice(15));const t=await startHeleketTopup(q.from,amount);await tgApi('editMessageText',{chat_id:q.message.chat.id,message_id:q.message.message_id,text:`<b>Счёт Heleket создан</b>\n\nСумма: ${money(t.amount)}\nКриптовалюту и сеть выберите на странице оплаты.\nПосле оплаты вернитесь сюда и нажмите «Проверить оплату».`,parse_mode:'HTML',reply_markup:heleketKeyboard(t.heleketInvoiceId,t.paymentUrl)});}else{const invoiceId=q.data.slice(13);const {invoice,status,settled}=await verifyAndSettleHeleketInvoice(invoiceId);if(settled)await show(q.message.chat.id,q.from,'profile',q.message.message_id);else if(['fail','cancel','system_fail','wrong_amount','locked'].includes(status)){await tgApi('editMessageText',{chat_id:q.message.chat.id,message_id:q.message.message_id,text:'<b>⌛ Счёт Heleket не оплачен</b>\n\nСоздайте новый счёт или обратитесь в поддержку.',parse_mode:'HTML',reply_markup:{inline_keyboard:[[button('Создать новый счёт','paymethod:heleket','primary')],[button('💬 Поддержка','support')],[button('← Главное меню','home')]]}});}else{await tgApi('editMessageText',{chat_id:q.message.chat.id,message_id:q.message.message_id,text:`<b>⏳ Оплата пока не подтверждена</b>\n\nСумма: ${money(invoice.amount)}\nСтатус: ${html(status||'проверяется')}\nОплатите счёт и повторите проверку.`,parse_mode:'HTML',reply_markup:heleketKeyboard(invoiceId,invoice.url,true)});}}}catch(e){await tgApi('sendMessage',{chat_id:q.message.chat.id,text:`Ошибка Heleket: ${html(e.message)}`});}continue;}
     if(q){await tgApi('answerCallbackQuery',{callback_query_id:q.id});const action=q.data;try{if(action.startsWith('buy:')){const out=buy(q.from,action.slice(4));await tgApi('sendMessage',{chat_id:q.message.chat.id,text:`✅ <b>Покупка выполнена</b>\n${out.title}\n\nВаш код:\n<code>${out.code}</code>`,parse_mode:'HTML'});await show(q.message.chat.id,q.from,'profile',q.message.message_id)}else if(action.startsWith('cryptocheck:')){const invoiceId=action.slice(12);const {invoice,settled}=await verifyAndSettleCryptoInvoice(invoiceId);if(settled)await show(q.message.chat.id,q.from,'profile',q.message.message_id);else if(invoice.status==='expired')await tgApi('editMessageText',{chat_id:q.message.chat.id,message_id:q.message.message_id,text:'<b>⌛ Счёт CryptoBot истёк</b>\n\nСоздайте новый счёт в разделе пополнения.',parse_mode:'HTML',reply_markup:{inline_keyboard:[[button('Создать новый счёт','paymethod:cryptobot','primary')],[button('← Главное меню','home')]]}});else{const paymentUrl=invoice.bot_invoice_url||invoice.mini_app_invoice_url||invoice.web_app_invoice_url;await tgApi('editMessageText',{chat_id:q.message.chat.id,message_id:q.message.message_id,text:`<b>⏳ Оплата пока не найдена</b>\n\nСумма: ${money(invoice.amount)}\nОплата: USDT\nОплатите счёт и повторите проверку.`,parse_mode:'HTML',reply_markup:{inline_keyboard:[[linkButton('Оплатить в CryptoBot',paymentUrl,'primary')],[button('✅ Проверить ещё раз',`cryptocheck:${invoice.invoice_id}`,'success')],[button('← Главное меню','home')]]}})}}else if(action.startsWith('topup:')){const [,method,amount]=action.split(':');if(method==='cryptobot'){const t=await startCryptoBotTopup(q.from,Number(amount));await tgApi('editMessageText',{chat_id:q.message.chat.id,message_id:q.message.message_id,text:`<b>Счёт CryptoBot создан</b>\n\nСумма: ${money(t.amount)}\nОплата: USDT\nПосле оплаты вернитесь сюда и нажмите «Проверить оплату».`,parse_mode:'HTML',reply_markup:{inline_keyboard:[[linkButton('Оплатить в CryptoBot',t.paymentUrl,'primary')],[button('✅ Проверить оплату',`cryptocheck:${t.cryptoPayInvoiceId}`,'success')],[button('← Главное меню','home')]]}})}else{const t=requestTopup(q.from,Number(amount),method);await tgApi('editMessageText',{chat_id:q.message.chat.id,message_id:q.message.message_id,text:`✅ Заявка на ${money(t.amount)} через ${paymentLabel(method)} создана.\nАдминистратор пришлёт реквизиты и подтвердит оплату.`,reply_markup:{inline_keyboard:[[{text:'🛟 Написать в поддержку',callback_data:'support'}],[{text:'‹ В меню',callback_data:'home'}]]}});for(const a of config.admins)await notify(a,`💳 Заявка ${method} на ${money(t.amount)} · пользователь ${q.from.id}`);if(config.adminChatId)await notify(config.adminChatId,`💳 Заявка ${method} на ${money(t.amount)} · пользователь ${q.from.id}`)}}else if(action==='ticket_new'){const t=createTicket(q.from);if(config.adminChatId)await notify(config.adminChatId,`🎫 Создан тикет <b>#${t.id}</b> от ${html(t.userName)}.`);await show(q.message.chat.id,q.from,`ticket:${t.id}`,q.message.message_id)}else if(action.startsWith('ticket_reply:')){pendingInput.set(q.from.id,{type:'ticket',id:action.slice(13)});await tgApi('sendMessage',{chat_id:q.message.chat.id,text:'✍️ Отправьте следующее сообщение — оно попадёт в тикет.'})}else if(action.startsWith('ticket_close:')&&await hasAdminAccess(q.from.id)){closeTicket(q.from.id,action.slice(13));await show(q.message.chat.id,q.from,'admin_tickets',q.message.message_id)}else if(action==='category_add'&&await hasAdminAccess(q.from.id)){pendingInput.set(q.from.id,{type:'category'});await tgApi('sendMessage',{chat_id:q.message.chat.id,text:'Введите название новой категории:'})}else if(action.startsWith('category_toggle:')&&await hasAdminAccess(q.from.id)){toggleCategory(q.from.id,action.slice(16));await show(q.message.chat.id,q.from,'admin_categories',q.message.message_id)}else if(action.startsWith('product_setcat:')&&await hasAdminAccess(q.from.id)){const [,pi,ci]=action.split(':');const a=adminView();setProductCategory(q.from.id,a.products[Number(pi)]?.id,a.categories[Number(ci)]?.id);await show(q.message.chat.id,q.from,`admin_product:${pi}`,q.message.message_id)}else if(action.startsWith('price_edit:')&&await hasAdminAccess(q.from.id)){const p=adminView().products[Number(action.slice(11))];pendingInput.set(q.from.id,{type:'price',id:p?.id});await tgApi('sendMessage',{chat_id:q.message.chat.id,text:'Введите новую цену числом в рублях:'})}else if(action.startsWith('codes_add:')&&await hasAdminAccess(q.from.id)){const p=adminView().products[Number(action.slice(10))];pendingInput.set(q.from.id,{type:'codes',id:p?.id});await tgApi('sendMessage',{chat_id:q.message.chat.id,text:'Отправьте коды активации: один код на строку. Логины и пароли не принимаются.'})}else if(action.startsWith('approve:')&&await hasAdminAccess(q.from.id)){const t=approveTopup(q.from.id,action.slice(8));await notify(t.userId,`✅ Баланс пополнен на <b>${money(t.amount)}</b>.`);await show(q.message.chat.id,q.from,'admin_topups',q.message.message_id)}else if(action!=='noop')await show(q.message.chat.id,q.from,action,q.message.message_id)}catch(e){await tgApi('sendMessage',{chat_id:q.message.chat.id,text:`Ошибка: ${html(e.message)}`})}}
   }}catch(e){console.error('Telegram polling error:',e.message)}setTimeout(()=>botLoop(offset),1000)}
-server.listen(config.port,()=>console.log(`NAREVO: http://localhost:${config.port}`));botLoop();
+server.listen(config.port,()=>console.log(`NAREVO MAIL: http://localhost:${config.port}`));botLoop();
