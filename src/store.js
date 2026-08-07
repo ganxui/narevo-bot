@@ -36,7 +36,6 @@ if (!fs.existsSync(file)) save();
 const id = () => crypto.randomUUID();
 const stock = productId => db.codes.filter(c => c.productId===productId && !c.orderId).length;
 
-// === USER VIEW ===
 export function userView(user) {
   const key=String(user.id); 
   if (!db.users[key]) {
@@ -59,7 +58,6 @@ export function userView(user) {
   };
 }
 
-// === ADMIN VIEW ===
 export function adminView(){ 
   return { 
     categories:db.categories.slice().sort((a,b)=>Number(b.active)-Number(a.active)), 
@@ -72,7 +70,6 @@ export function adminView(){
   }; 
 }
 
-// === BUY ===
 export function buy(user, productId){ 
   const p=db.products.find(x=>x.id===productId&&x.active); 
   const u=db.users[String(user.id)]; 
@@ -98,7 +95,6 @@ export function buy(user, productId){
   return {...order,code:decrypt(code.value),balance:u.balance}; 
 }
 
-// === TOPUP ===
 export function requestTopup(user, amount, method='sbp'){ 
   if(!Number.isFinite(amount)||amount<50||amount>100000) throw Error('Сумма от 50 до 100 000 ₽'); 
   const validMethods = ['sbp','sbp14','cryptobot','heleket']; 
@@ -124,7 +120,6 @@ export function requestTopup(user, amount, method='sbp'){
   return t; 
 }
 
-// === CRYPTOBOT ===
 export function attachCryptoPayInvoice(topupId,invoiceId,paymentUrl){
   const t=db.topups.find(x=>x.id===topupId&&x.method==='cryptobot'&&x.status==='pending');
   if(!t) throw Error('Заявка CryptoBot не найдена');
@@ -155,7 +150,6 @@ export function settleCryptoPayInvoice(topupId,invoiceId,amount){
   return {...t,newlyApproved};
 }
 
-// === HELEKET ===
 export function attachHeleketInvoice(topupId,invoiceId,paymentUrl){
   const t=db.topups.find(x=>x.id===topupId&&x.method==='heleket'&&x.status==='pending');
   if(!t) throw Error('Заявка Heleket не найдена');
@@ -186,7 +180,6 @@ export function settleHeleketInvoice(topupId,invoiceId,amount){
   return {...t,newlyApproved};
 }
 
-// === FAIL TOPUP ===
 export function failTopup(topupId,reason){
   const t=db.topups.find(x=>x.id===topupId&&x.status==='pending');
   if(t){
@@ -197,7 +190,6 @@ export function failTopup(topupId,reason){
   return t;
 }
 
-// === CODES ===
 export function addCodes(adminId,productId,values){ 
   const p=db.products.find(x=>x.id===productId); 
   if(!p) throw Error('Товар не найден'); 
@@ -216,7 +208,6 @@ export function addCodes(adminId,productId,values){
   return clean.length; 
 }
 
-// === APPROVE TOPUP ===
 export function approveTopup(adminId,topupId){ 
   const t=db.topups.find(x=>x.id===topupId); 
   if(!t||t.status!=='pending') throw Error('Заявка уже обработана'); 
@@ -228,7 +219,6 @@ export function approveTopup(adminId,topupId){
   return t; 
 }
 
-// === PRODUCTS ===
 export function addProduct(adminId,p){ 
   const category=db.categories.find(c=>c.id===p.categoryId&&c.active)||db.categories.find(c=>c.active);
   const product={
@@ -257,7 +247,6 @@ export function archiveProduct(adminId,productId){
   return p;
 }
 
-// === CATEGORIES ===
 export function addCategory(adminId,title){
   title=String(title).trim().slice(0,60);
   if(!title) throw Error('Название пустое');
@@ -277,7 +266,6 @@ export function toggleCategory(adminId,categoryId){
   return c;
 }
 
-// === PRICE ===
 export function updateProductPrice(adminId,productId,price){
   const p=db.products.find(x=>x.id===productId);
   price=Number(price);
@@ -288,7 +276,6 @@ export function updateProductPrice(adminId,productId,price){
   return p;
 }
 
-// === PRODUCT CATEGORY ===
 export function setProductCategory(adminId,productId,categoryId){
   const p=db.products.find(x=>x.id===productId);
   const c=db.categories.find(x=>x.id===categoryId);
@@ -299,7 +286,6 @@ export function setProductCategory(adminId,productId,categoryId){
   return p;
 }
 
-// === TICKETS ===
 export function createTicket(user){
   const existing=db.tickets.find(t=>t.userId===user.id&&t.status==='open');
   if(existing) return ticketView(existing);
@@ -347,7 +333,6 @@ export function closeTicket(adminId,ticketId){
   return ticketView(t);
 }
 
-// === UI MESSAGES ===
 export function getUiMessage(chatId){
   return db.uiMessages[String(chatId)] || null;
 }
@@ -358,7 +343,6 @@ export function setUiMessage(chatId,messageId){
   save();
 }
 
-// === BUTTON EMOJIS ===
 export function getButtonEmojis(){
   return {...(db.settings.buttonEmojis || {})};
 }
@@ -376,7 +360,6 @@ export function setButtonEmojis(adminId,values){
   return getButtonEmojis();
 }
 
-// === USER AGREEMENT ===
 export function setUserAgreed(userId) {
   const key = String(userId);
   if (!db.users[key]) {
@@ -399,7 +382,6 @@ export function hasUserAgreed(userId) {
   return db.users[key] && db.users[key].agreed === true;
 }
 
-// === HELPERS ===
 function ticketView(t){
   return {...t, messages: t.messages.slice(-20)};
 }
