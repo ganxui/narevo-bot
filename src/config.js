@@ -25,10 +25,6 @@ export const config = {
     apiKey: process.env.HELEKET_PAYMENT_API_KEY || '',
     baseUrl: (process.env.HELEKET_API_URL || 'https://api.heleket.com').replace(/\/$/, ''),
   },
-  telegaPay: {
-    apiKey: process.env.TELEGAPAY_API_KEY11 || process.env.TELEGAPAY_API_KEY || '',
-    baseUrl: (process.env.TELEGAPAY_API_URL || 'https://secure.telegapay.link/api/v1').replace(/\/$/, ''),
-  },
   buttonEmoji: {
     cryptoBot: process.env.CRYPTOPAY_BUTTON_EMOJI_ID || '',
     heleket: process.env.HELEKET_BUTTON_EMOJI_ID || '',
