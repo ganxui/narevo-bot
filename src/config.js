@@ -26,7 +26,7 @@ export const config = {
     baseUrl: (process.env.HELEKET_API_URL || 'https://api.heleket.com').replace(/\/$/, ''),
   },
   telegaPay: {
-    apiKey: process.env.TELEGAPAY_API_KEY || '',
+    apiKey: process.env.TELEGAPAY_API_KEY11 || process.env.TELEGAPAY_API_KEY || '',
     baseUrl: (process.env.TELEGAPAY_API_URL || 'https://secure.telegapay.link/api/v1').replace(/\/$/, ''),
   },
   buttonEmoji: {
