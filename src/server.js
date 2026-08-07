@@ -46,7 +46,15 @@ const quickSections=new Map([['🛍 Каталог','catalog'],['👤 Кабин
 const quickMenu=()=>({keyboard:[[{text:'🛍 Каталог'},{text:'👤 Кабинет'}],[{text:'📦 Покупки'},{text:'💳 Пополнить'}],[{text:'💬 Поддержка'}]],resize_keyboard:true,is_persistent:true,input_field_placeholder:'Выберите раздел NAREVO'});
 const paymentButton=(label,fallbackIcon,callback,style,customIcon)=>button(`${customIcon?'':`${fallbackIcon} `}${label}`,callback,style,customIcon);
 const paymentEmojis=()=>({...config.buttonEmoji,...getButtonEmojis()});
-const paymentLabel=method=>method==='sbp'||method==='sbp14'?'СБП НСПК · 14%':method==='heleket'?'Crypto · Heleket':'CryptoBot · USDT';
+const paymentLabel=method=>{
+  const labels = {
+    'sbp': 'СБП НСПК · 14%',
+    'sbp14': 'СБП НСПК · 14%',
+    'heleket': 'Crypto · Heleket',
+    'cryptobot': 'CryptoBot · USDT'
+  };
+  return labels[method] || method;
+};
 const topupSummary=t=>{const payable=Number(t.displayAmount??t.paymentAmount??t.amount);const fee=Math.round((payable-Number(t.amount))*100)/100;return `На баланс: <b>${money(t.amount)}</b>\nКомиссия: <b>${money(fee)}</b>\nК оплате: <b>${money(payable)}</b>`};
 async function installQuickMenu(chatId){const response=await tgApi('sendMessage',{chat_id:chatId,text:'Быстрое меню включено.',reply_markup:quickMenu()});if(response.ok){const sent=await response.clone().json();await tgApi('deleteMessage',{chat_id:chatId,message_id:sent.result.message_id})}}
 const imageForSection=section=>{let name='catalog';if(section==='home')return config.productImageUrl;if(section==='profile')name='profile';else if(section==='orders')name='orders';else if(section==='topup'||section.startsWith('paymethod:')||section.startsWith('topup_custom:'))name='pay';else if(section==='rules'||section.startsWith('rule:'))name='rules';else if(section==='support'||section.startsWith('ticket:'))name='support';else if(section.startsWith('admin')||section.startsWith('category_')||section.startsWith('product_')||section.startsWith('price_')||section.startsWith('codes_'))name='admin';return `${config.sectionImageBaseUrl}/section-${name}.png?v=1`};
@@ -71,7 +79,7 @@ function getPrivacyPolicy() {
 🛡 Все коды хранятся в зашифрованном виде.
 Данные не передаются третьим лицам.
 
-📅 Дата: 01.08.2026
+📅 Дата: 07.08.2026
 
 Подробнее: https://telegra.ph/Politika-konfidencialnosti-08-01-83`;
 }
@@ -89,7 +97,7 @@ function getTermsOfService() {
 • Код уже был использован
 • Товар не соответствует описанию
 
-📅 Дата: 01.08.2026
+📅 Дата: 07.08.2026
 
 Подробнее: https://telegra.ph/Polzovatelskoe-soglashenie-08-01-39`;
 }
@@ -100,8 +108,16 @@ async function show(chatId,user,section,messageId){const data=userView(user);con
   else if(section.startsWith('product:')){const p=data.products.find(x=>x.id===section.slice(8));if(!p)return;const categoryIndex=data.categories.findIndex(c=>c.id===p.categoryId);text=`<b>📦 ${html(p.title)}</b>\n${html(p.term)}\n\n${html(p.description)}\n\nЦена: <b>${money(p.price)}</b>\nДоступно: <b>${p.stock}</b>`;keyboard=[[button(p.stock?'🛒 Купить':'Нет в наличии',p.stock?`buy:${p.id}`:'noop',p.stock?'primary':undefined)],[button('← К товарам',`category:${Math.max(0,categoryIndex)}`)]];}
   else if(section==='profile'){text=`<b>Личный кабинет</b>\n\n${data.user.name}\nTelegram ID: <code>${data.user.id}</code>\nБаланс: <b>${money(data.user.balance)}</b>\nПокупок: ${data.orders.length}`;keyboard=[[{text:'💳 Пополнить баланс',callback_data:'topup'}],[{text:'‹ В меню',callback_data:'home'}]];}
   else if(section==='orders'){text='<b>Мои покупки</b>\n\n'+(data.orders.length?data.orders.slice(-8).reverse().map(o=>`• ${o.title}\n<code>${o.code}</code>\n${money(o.price)}`).join('\n\n'):'Покупок пока нет.');keyboard=[[{text:'‹ В меню',callback_data:'home'}]];}
-  else if(section==='topup'){const icons=paymentEmojis();text='<b>💳 Пополнение баланса</b>\n\nВыберите способ оплаты:';keyboard=[[paymentButton('CryptoBot · USDT','💎','paymethod:cryptobot','primary',icons.cryptoBot)],[paymentButton('Crypto · Heleket','🔥','paymethod:heleket','danger',icons.heleket)],[paymentButton('СБП НСПК · 14%','₽','paymethod:sbp',undefined,icons.sbp)],[button('← Главное меню','home')]];}
-  else if(section.startsWith('paymethod:')){const method=section.slice(10);const label=paymentLabel(method);text=`<b>${label}</b>\n\nВыберите сумму пополнения:`;keyboard=[[500,1000,2000].map(x=>button(money(x),`topup:${method}:${x}`,'primary')),[button('✏️ Ввести свою сумму',`topup_custom:${method}`)],[button('← Назад','topup')]];}
+  else if(section==='topup'){const icons=paymentEmojis();text='<b>💳 Пополнение баланса</b>\n\nВыберите способ оплаты:';
+    keyboard = [
+      [{text:'💳 Банковские карты и СБП', callback_data:'fiat_payments'}],
+      [{text:'🪙 Криптовалюта', callback_data:'crypto_payments'}],
+      [button('← Главное меню','home')]
+    ];
+  }
+  else if(section==='fiat_payments'){const icons=paymentEmojis();text='<b>💳 Банковские карты и СБП</b>\n\nКомиссия: <b>14%</b> (СБП НСПК)\n💰 Карты РФ и СберПэй — по запросу администратора.\nМинимальная сумма: 50 ₽';keyboard=[[paymentButton('СБП НСПК · 14%','₽','paymethod:sbp',undefined,icons.sbp)],[button('← Назад','topup')]];}
+  else if(section==='crypto_payments'){const icons=paymentEmojis();text='<b>🪙 Криптовалюта</b>\n\nКомиссия: <b>0%</b>\nДоступные способы: USDT (CryptoBot) и другие криптовалюты через Heleket.\nМинимальная сумма: 50 ₽';keyboard=[[paymentButton('CryptoBot · USDT','💎','paymethod:cryptobot','primary',icons.cryptoBot)],[paymentButton('Crypto · Heleket','🔥','paymethod:heleket','danger',icons.heleket)],[button('← Назад','topup')]];}
+  else if(section.startsWith('paymethod:')){const method=section.slice(10);const label=paymentLabel(method);text=`<b>${label}</b>\n\nВыберите сумму пополнения:`;keyboard=[[500,1000,2000].map(x=>button(money(x),`topup:${method}:${x}`,'primary')),[button('✏️ Ввести свою сумму',`topup_custom:${method}`)],[button('← Назад',section==='fiat_payments'?'fiat_payments':'crypto_payments')]];}
   else if(section.startsWith('topup_custom:')){const method=section.slice(13);pendingInput.set(user.id,{type:'topup_custom',method});text=`<b>✏️ Своя сумма · ${paymentLabel(method)}</b>\n\nВведите сумму от 50 до 100 000 ₽ одним сообщением.`;keyboard=[[button('Отмена','topup')]];}
   else if(section==='privacy'){text=getPrivacyPolicy();keyboard=[[button('← В меню','home')]];}
   else if(section==='terms'){text=getTermsOfService();keyboard=[[button('← В меню','home')]];}
