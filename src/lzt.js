@@ -8,71 +8,75 @@ export function lztReady(config){
   return Boolean(config?.lzt?.clientId && config?.lzt?.clientSecret && config?.lzt?.merchantId);
 }
 
+function extractApiMessage(data, fallback){
+  const raw=data?.message ?? data?.error_description ?? data?.error ?? data?.errors?.[0]?.message;
+  if(raw==null || raw==='') return fallback;
+  if(typeof raw==='string') return raw;
+  try{return JSON.stringify(raw);}catch{return String(raw);}
+}
+
+async function readResponse(response){
+  const text=await response.text();
+  if(!text) return {data:{},text:''};
+  try{return {data:JSON.parse(text),text};}catch{return {data:{},text};}
+}
+
 async function getLztAccessToken(config){
   if(!lztReady(config)) throw Error('LZT Market пока не настроен');
   const key=`${config.lzt.clientId}:${config.lzt.clientSecret}`;
   if(tokenCache.token && tokenCache.key===key && Date.now()<tokenCache.expiresAt-60_000) return tokenCache.token;
 
+  // Official LZT OpenAPI specifies multipart/form-data for /oauth/token.
+  const form=new FormData();
+  form.append('grant_type','client_credentials');
+  form.append('client_id',String(config.lzt.clientId).trim());
+  form.append('client_secret',String(config.lzt.clientSecret).trim());
+  // "scope" is an array with spaceDelimited encoding; for one scope its wire value is simply "invoice".
+  form.append('scope','invoice');
+
   const response=await fetch(config.lzt.oauthUrl||'https://api.lolz.team/oauth/token',{
     method:'POST',
-    headers:{'Accept':'application/json','Content-Type':'application/json'},
-    body:JSON.stringify({
-      grant_type:'client_credentials',
-      client_id:String(config.lzt.clientId),
-      client_secret:String(config.lzt.clientSecret),
-      scope:['invoice']
-    })
+    headers:{'Accept':'application/json'},
+    body:form
   });
-  let data={};
-  try{data=await response.json();}catch{}
+  const {data,text}=await readResponse(response);
   if(!response.ok){
-    const message=data?.message||data?.error_description||data?.error||`LZT OAuth: HTTP ${response.status}`;
-    throw Error(typeof message==='string'?message:JSON.stringify(message));
+    const fallback=text?.trim()?.slice(0,500) || `LZT OAuth: HTTP ${response.status}`;
+    throw Error(extractApiMessage(data,fallback));
   }
-  const token=data?.access_token||data?.data?.access_token;
-  if(!token) throw Error('LZT OAuth не вернул access_token');
-  const expiresIn=Number(data?.expires_in||data?.data?.expires_in||3600);
-  tokenCache={token:String(token),expiresAt:Date.now()+Math.max(300,expiresIn)*1000,key};
+  const token=data?.access_token ?? data?.data?.access_token;
+  if(!token){
+    const safe=text?.trim()?.slice(0,500);
+    throw Error(`LZT OAuth не вернул access_token${safe?`: ${safe}`:''}`);
+  }
+  const expiresIn=Number(data?.expires_in ?? data?.data?.expires_in ?? 3600);
+  tokenCache={token:String(token),expiresAt:Date.now()+Math.max(300,Number.isFinite(expiresIn)?expiresIn:3600)*1000,key};
   return tokenCache.token;
 }
 
 async function lztRequest(config,method,endpoint,payload){
-  const token=await getLztAccessToken(config);
-  const doRequest=()=>fetch(`${config.lzt.baseUrl}${endpoint}`,{
+  let token=await getLztAccessToken(config);
+  const request=async bearer=>fetch(`${config.lzt.baseUrl}${endpoint}`,{
     method,
     headers:{
-      'Authorization':`Bearer ${tokenCache.token || token}`,
+      'Authorization':`Bearer ${bearer}`,
       'Accept':'application/json',
       ...(payload?{'Content-Type':'application/json'}:{})
     },
     ...(payload?{body:JSON.stringify(payload)}:{})
   });
 
-  let response=await doRequest();
+  let response=await request(token);
   if(response.status===401){
     tokenCache={token:'',expiresAt:0,key:''};
-    await getLztAccessToken(config);
-    response=await fetch(`${config.lzt.baseUrl}${endpoint}`,{
-      method,
-      headers:{
-        'Authorization':`Bearer ${tokenCache.token}`,
-        'Accept':'application/json',
-        ...(payload?{'Content-Type':'application/json'}:{})
-      },
-      ...(payload?{body:JSON.stringify(payload)}:{})
-    });
+    token=await getLztAccessToken(config);
+    response=await request(token);
   }
 
-  let data={};
-  try{data=await response.json();}catch{}
+  const {data,text}=await readResponse(response);
   if(!response.ok){
-    const rawMessage=data?.message??data?.error_description??data?.error??data?.errors?.[0]?.message;
-    let message=rawMessage;
-    if(message&&typeof message!=='string'){
-      try{message=JSON.stringify(message);}catch{message=String(message);}
-    }
-    if(!message) message=`LZT Market API: HTTP ${response.status}`;
-    throw Error(String(message));
+    const fallback=text?.trim()?.slice(0,500) || `LZT Market API: HTTP ${response.status}`;
+    throw Error(extractApiMessage(data,fallback));
   }
   return data;
 }
