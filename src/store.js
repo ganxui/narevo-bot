@@ -41,12 +41,20 @@ export function userView(user) {
   if (!db.users[key]) {
     db.users[key] = { 
       id:user.id, 
-      name:user.first_name||user.username||'Пользователь', 
+      name:user.first_name||user.username||'Пользователь',
+      username:user.username||'',
       balance:0, 
       joinedAt:new Date().toISOString(),
       agreed: false
     }; 
     save();
+  } else {
+    let changed=false;
+    const nextName=user.first_name||user.username||db.users[key].name||'Пользователь';
+    const nextUsername=user.username||'';
+    if(db.users[key].name!==nextName){db.users[key].name=nextName;changed=true}
+    if((db.users[key].username||'')!==nextUsername){db.users[key].username=nextUsername;changed=true}
+    if(changed)save();
   }
   return { 
     user:db.users[key], 
@@ -69,6 +77,25 @@ export function adminView(){
     audit:db.audit.slice(-50).reverse(),
     botEnabled: isBotEnabled()
   }; 
+}
+
+export function getRecentTopups(days=3){
+  const safeDays=Math.max(1,Math.min(30,Number(days)||3));
+  const cutoff=Date.now()-safeDays*24*60*60*1000;
+  return db.topups
+    .filter(t=>{
+      const when=Date.parse(t.createdAt||t.approvedAt||0);
+      return Number.isFinite(when)&&when>=cutoff;
+    })
+    .map(t=>{
+      const u=db.users[String(t.userId)]||{};
+      return {
+        ...t,
+        userName:t.userName||u.name||'Пользователь',
+        username:t.username||u.username||''
+      };
+    })
+    .sort((a,b)=>Date.parse(b.createdAt||0)-Date.parse(a.createdAt||0));
 }
 
 export function buy(user, productId){ 
@@ -97,7 +124,12 @@ export function buy(user, productId){
 }
 
 export function requestTopup(user, amount, method='sbp'){ 
-  if(!Number.isFinite(amount)||amount<50||amount>100000) throw Error('Сумма от 50 до 100 000 ₽'); 
+  if(!Number.isFinite(amount)||amount<50||amount>100000) throw Error('Сумма от 50 до 100 000 ₽');
+  const userKey=String(user.id);
+  if(db.users[userKey]){
+    db.users[userKey].name=user.first_name||user.username||db.users[userKey].name||'Пользователь';
+    db.users[userKey].username=user.username||'';
+  }
   const validMethods = ['sbp','sbp14','cryptobot','heleket']; 
   if(!validMethods.includes(method)) throw Error('Способ оплаты недоступен'); 
   const feeRates = { 'sbp': 0.14, 'sbp14': 0.14, 'cryptobot': 0, 'heleket': 0 }; 
@@ -113,6 +145,8 @@ export function requestTopup(user, amount, method='sbp'){
     feeAmount,
     method,
     status:'pending',
+    userName:user.first_name||user.username||db.users[userKey]?.name||'Пользователь',
+    username:user.username||db.users[userKey]?.username||'',
     createdAt:new Date().toISOString()
   }; 
   db.topups.push(t); 
@@ -181,6 +215,13 @@ export function settleHeleketInvoice(topupId,invoiceId,amount){
   return {...t,newlyApproved};
 }
 
+
+export function getPendingHeleketTopups(){
+  return db.topups
+    .filter(t=>t.method==='heleket'&&t.status==='pending'&&t.heleketInvoiceId)
+    .map(t=>({...t}));
+}
+
 export function failTopup(topupId,reason){
   const t=db.topups.find(x=>x.id===topupId&&x.status==='pending');
   if(t){
@@ -213,7 +254,8 @@ export function approveTopup(adminId,topupId){
   const t=db.topups.find(x=>x.id===topupId); 
   if(!t||t.status!=='pending') throw Error('Заявка уже обработана'); 
   if(t.cryptoPayInvoiceId||t.heleketInvoiceId) throw Error('Автоматический счёт подтверждается только через платёжную систему');
-  t.status='approved'; 
+  t.status='approved';
+  t.approvedAt=new Date().toISOString();
   db.users[String(t.userId)].balance+=t.amount; 
   audit(adminId,'topup_approved',t.id); 
   save(); 

@@ -7,6 +7,18 @@ export function signHeleketBody(rawBody, apiKey) {
   return crypto.createHash('md5').update(base64 + apiKey).digest('hex');
 }
 
+export function verifyHeleketWebhook(rawBody, apiKey) {
+  let payload;
+  try { payload = JSON.parse(rawBody || '{}'); } catch { return false; }
+  const received = String(payload.sign || '');
+  if (!received) return false;
+  delete payload.sign;
+  const normalized = JSON.stringify(payload).replace(/\//g, '\\/');
+  const expected = signHeleketBody(normalized, apiKey);
+  if (received.length !== expected.length) return false;
+  return crypto.timingSafeEqual(Buffer.from(received), Buffer.from(expected));
+}
+
 async function callHeleket(config, path, payload) {
   if (!heleketReady(config)) throw Error('Heleket пока не настроен');
   const rawBody = JSON.stringify(payload);
@@ -29,7 +41,7 @@ async function callHeleket(config, path, payload) {
 }
 
 export async function createHeleketInvoice(config, { amount, topupId }) {
-  const result = await callHeleket(config, '/v1/payment', {
+  const payload = {
     amount: String(amount),
     currency: 'RUB',
     order_id: topupId,
@@ -37,7 +49,11 @@ export async function createHeleketInvoice(config, { amount, topupId }) {
     is_payment_multiple: true,
     theme: 'dark',
     additional_data: topupId,
-  });
+  };
+  if (config.publicUrl && !/^https?:\/\/(localhost|127\.0\.0\.1)(?::|\/|$)/i.test(config.publicUrl)) {
+    payload.url_callback = `${config.publicUrl}/api/payments/heleket/webhook`;
+  }
+  const result = await callHeleket(config, '/v1/payment', payload);
   if (!result.uuid || !result.url) throw Error('Heleket не вернул ссылку на оплату');
   return { invoiceId: result.uuid, paymentUrl: result.url, status: result.payment_status };
 }
