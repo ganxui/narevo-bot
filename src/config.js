@@ -37,6 +37,7 @@ export const config = {
     cryptoBot: process.env.CRYPTOPAY_BUTTON_EMOJI_ID || '',
     heleket: process.env.HELEKET_BUTTON_EMOJI_ID || '',
     sbp: process.env.SBP_BUTTON_EMOJI_ID || '',
+    lzt: process.env.LZT_BUTTON_EMOJI_ID || '',
   },
   demo: !process.env.BOT_TOKEN,
 };

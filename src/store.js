@@ -441,14 +441,27 @@ export function getButtonEmojis(){
 }
 
 export function setButtonEmojis(adminId,values){
-  const ids=values.slice(0,3).map(String);
-  if(ids.length!==3||ids.some(x=>!/^\d+$/.test(x))) throw Error('Нужно отправить три премиум-эмодзи одним сообщением');
+  const ids=values.slice(0,4).map(String);
+  if(ids.length!==4||ids.some(x=>!/^\d+$/.test(x))) throw Error('Нужно отправить четыре премиум-эмодзи одним сообщением');
   db.settings.buttonEmojis = {
     cryptoBot: ids[0],
     heleket: ids[1],
-    sbp: ids[2]
+    sbp: ids[2],
+    lzt: ids[3]
   };
   audit(adminId,'button_emojis_updated','payments');
+  save();
+  return getButtonEmojis();
+}
+
+export function setLztButtonEmoji(adminId,value){
+  const id=String(value||'');
+  if(!/^\d+$/.test(id)) throw Error('Нужно отправить один премиум-эмодзи LZT');
+  db.settings.buttonEmojis = {
+    ...(db.settings.buttonEmojis || {}),
+    lzt: id
+  };
+  audit(adminId,'lzt_button_emoji_updated','payments');
   save();
   return getButtonEmojis();
 }
