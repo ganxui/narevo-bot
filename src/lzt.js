@@ -20,7 +20,8 @@ async function lztRequest(config, method, endpoint, payload){
   let data={};
   try{ data=await response.json(); }catch{}
   if(!response.ok){
-    const rawMessage = data?.message ?? data?.error ?? data?.errors?.[0]?.message;
+    const firstError = Array.isArray(data?.errors) ? data.errors[0] : undefined;
+    const rawMessage = data?.message ?? data?.error ?? (typeof firstError === 'string' ? firstError : firstError?.message);
     let message = rawMessage;
     if(message && typeof message !== 'string'){
       try{ message = JSON.stringify(message); }catch{ message = String(message); }
@@ -41,8 +42,10 @@ export async function createLztInvoice(config,{amount,topupId,user}){
     amount: Number(amount),
     payment_id: String(topupId),
     comment: `Пополнение баланса NAREVO · ${topupId}`,
-    url_success: `${config.publicUrl}/?payment=lzt-success`,
-    url_callback: `${config.publicUrl}/api/payments/lzt/webhook`,
+    // LZT requires a valid public redirect URL. A Telegram bot link is valid here.
+    // We intentionally omit url_callback: payment confirmation is performed by
+    // the existing "Проверить оплату" button / invoice status polling.
+    url_success: config.lzt.successUrl || 'https://t.me/narevo_bot',
     merchant_id: Number(config.lzt.merchantId),
     lifetime: 3600,
     additional_data: JSON.stringify({topupId:String(topupId),telegramId:Number(user?.id||0)}),

@@ -31,6 +31,7 @@ export const config = {
     merchantToken: process.env.LZT_MERCHANT_TOKEN || '',
     currency: process.env.LZT_CURRENCY || 'RUB',
     baseUrl: (process.env.LZT_API_URL || 'https://prod-api.lzt.market').replace(/\/$/, ''),
+    successUrl: process.env.LZT_SUCCESS_URL || 'https://t.me/narevo_bot',
   },
   buttonEmoji: {
     cryptoBot: process.env.CRYPTOPAY_BUTTON_EMOJI_ID || '',
