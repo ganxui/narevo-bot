@@ -18,6 +18,17 @@ export async function createCryptoPayInvoice(config,{amount,userId,topupId}){
   return {invoiceId:String(invoice.invoice_id),paymentUrl,userId};
 }
 
-export async function getCryptoPayInvoice(config,invoiceId){const result=await call(config,'getInvoices',{invoice_ids:String(invoiceId)});const invoice=(Array.isArray(result)?result:result.items||[])[0];if(!invoice)throw Error('Счёт CryptoBot не найден');return invoice}
+export async function getCryptoPayInvoices(config,invoiceIds){
+  const ids=[...new Set((invoiceIds||[]).map(String).filter(Boolean))];
+  if(!ids.length)return [];
+  const result=await call(config,'getInvoices',{invoice_ids:ids.join(',')});
+  return Array.isArray(result)?result:(result.items||[]);
+}
+
+export async function getCryptoPayInvoice(config,invoiceId){
+  const invoice=(await getCryptoPayInvoices(config,[invoiceId]))[0];
+  if(!invoice)throw Error('Счёт CryptoBot не найден');
+  return invoice;
+}
 
 export function verifyCryptoPayWebhook(token,rawBody,signature){if(!token||!signature)return false;const secret=crypto.createHash('sha256').update(token).digest();const expected=crypto.createHmac('sha256',secret).update(rawBody).digest('hex');const left=Buffer.from(expected);const right=Buffer.from(String(signature));return left.length===right.length&&crypto.timingSafeEqual(left,right)}

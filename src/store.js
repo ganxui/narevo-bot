@@ -66,7 +66,8 @@ export function adminView(){
     topups:db.topups.slice(-50).reverse(), 
     tickets:db.tickets.slice(-50).reverse().map(ticketView), 
     users:Object.values(db.users), 
-    audit:db.audit.slice(-50).reverse() 
+    audit:db.audit.slice(-50).reverse(),
+    botEnabled: isBotEnabled()
   }; 
 }
 
@@ -341,6 +342,22 @@ export function setUiMessage(chatId,messageId){
   if(messageId) db.uiMessages[String(chatId)] = messageId;
   else delete db.uiMessages[String(chatId)];
   save();
+}
+
+
+export function getAllUserIds(){
+  return Object.values(db.users).map(u=>u.id).filter(id=>Number.isInteger(Number(id)));
+}
+
+export function isBotEnabled(){
+  return db.settings.botEnabled !== false;
+}
+
+export function setBotEnabled(adminId,enabled){
+  db.settings.botEnabled = Boolean(enabled);
+  audit(adminId, db.settings.botEnabled ? 'bot_enabled' : 'bot_disabled', 'service');
+  save();
+  return db.settings.botEnabled;
 }
 
 export function getButtonEmojis(){
