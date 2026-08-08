@@ -20,8 +20,17 @@ async function lztRequest(config, method, endpoint, payload){
   let data={};
   try{ data=await response.json(); }catch{}
   if(!response.ok){
-    const message=data?.message||data?.error||data?.errors?.[0]?.message||`LZT Market API: HTTP ${response.status}`;
-    throw Error(typeof message==='string'?message:JSON.stringify(message));
+    const rawMessage = data?.message ?? data?.error ?? data?.errors?.[0]?.message;
+    let message = rawMessage;
+    if(message && typeof message !== 'string'){
+      try{ message = JSON.stringify(message); }catch{ message = String(message); }
+    }
+    if(!message){
+      if(response.status === 403) message = 'LZT Market отклонил запрос (403). Проверьте, что Access Token выдан со scope invoice и имеет доступ к указанному Merchant ID.';
+      else if(response.status === 401) message = 'LZT Market отклонил токен (401). Проверьте LZT_API_TOKEN.';
+      else message = `LZT Market API: HTTP ${response.status}`;
+    }
+    throw Error(String(message));
   }
   return data;
 }
@@ -37,8 +46,6 @@ export async function createLztInvoice(config,{amount,topupId,user}){
     merchant_id: Number(config.lzt.merchantId),
     lifetime: 3600,
     additional_data: JSON.stringify({topupId:String(topupId),telegramId:Number(user?.id||0)}),
-    ...(user?.id ? {required_telegram_id:Number(user.id)} : {}),
-    ...(user?.username ? {required_telegram_username:`@${String(user.username).replace(/^@/,'')}`} : {})
   };
   const invoice=normalizeInvoice(await lztRequest(config,'POST','/invoice',payload));
   if(!invoice?.invoice_id || !invoice?.url) throw Error('LZT Market вернул неполные данные счёта');
