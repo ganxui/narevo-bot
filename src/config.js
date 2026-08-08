@@ -26,11 +26,15 @@ export const config = {
     baseUrl: (process.env.HELEKET_API_URL || 'https://api.heleket.com').replace(/\/$/, ''),
   },
   lzt: {
-    apiToken: process.env.LZT_API_TOKEN || process.env.LZT_TOKEN || '',
+    clientId: process.env.LZT_CLIENT_ID || '',
+    clientSecret: process.env.LZT_CLIENT_SECRET || '',
     merchantId: process.env.LZT_MERCHANT_ID || '',
-    merchantToken: process.env.LZT_MERCHANT_TOKEN || '',
+    merchantKey: process.env.LZT_MERCHANT_KEY || '',
     currency: process.env.LZT_CURRENCY || 'RUB',
     baseUrl: (process.env.LZT_API_URL || 'https://prod-api.lzt.market').replace(/\/$/, ''),
+    oauthUrl: process.env.LZT_OAUTH_URL || 'https://api.lolz.team/oauth/token',
+    successUrl: process.env.LZT_SUCCESS_URL || 'https://t.me/narevo_bot',
+    callbackUrl: process.env.LZT_CALLBACK_URL || '',
   },
   buttonEmoji: {
     cryptoBot: process.env.CRYPTOPAY_BUTTON_EMOJI_ID || '',
