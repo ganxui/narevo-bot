@@ -533,13 +533,20 @@ ${lines.length?lines.join('\n\n'):'За последние 3 дня пополн
     if(safePage>0)nav.push(button('← Новее',`admin_topup_log:${safePage-1}`));
     if(safePage<pages-1)nav.push(button('Старее →',`admin_topup_log:${safePage+1}`));
     if(nav.length)keyboard.push(nav);
-    keyboard.push([button('↻ Обновить',`admin_topup_log:${safePage}`)],[button('‹ В админ-панель','admin')]);
+    keyboard.push([button('↻ Обновить',`admin_topup_log:${safePage}`)],[button('‹ В админ-панель','admin_from_text')]);
   }
   else if(section==='admin_topups'&&admin){const pending=adminView().topups.filter(x=>x.status==='pending'&&!x.cryptoPayInvoiceId&&!x.heleketInvoiceId);text='<b>Заявки на пополнение</b>\n\n'+(pending.length?pending.map(t=>`${paymentLabel(t.method)} · ID ${t.userId}\n${topupSummary(t)}`).join('\n\n'):'Новых заявок для ручного подтверждения нет.');keyboard=pending.map(t=>[{text:`${paymentLabel(t.method)} · оплатить ${money(t.paymentAmount??t.amount)}`,callback_data:`approve:${t.id}`}]);keyboard.push([{text:'‹ В админ-панель',callback_data:'admin'}]);}
   else if(section==='admin_stock'&&admin){const a=adminView();text='<b>Остатки товаров</b>\n\n'+a.products.map(p=>`${p.title}: <b>${p.stock}</b>`).join('\n')+'\n\nДля безопасной загрузки кодов используйте Mini App или API админ-панели.';keyboard=[[{text:'‹ В админ-панель',callback_data:'admin'}]];}
   else{text='<b>NAREVO MAIL</b>\nОфициальные цифровые коды подписок.\n\nВыберите раздел:';keyboard=menu(user,admin).inline_keyboard;}
   
   const reply_markup={inline_keyboard:keyboard};
+
+  // Длинный лог пополнений нельзя помещать в caption фотографии (лимит Telegram — 1024 символа).
+  // Поэтому экран лога всегда рендерим как обычное текстовое сообщение.
+  if(section.startsWith('admin_topup_log:')){
+    await replaceUiWithText(chatId,messageId,text,reply_markup);
+    return;
+  }
 
   if(messageId){
     const response=await tgApi('editMessageMedia',{
@@ -669,6 +676,11 @@ async function botLoop(offset=0){if(!config.token)return;try{const r=await fetch
       else if(action.startsWith('product_setcat:')&&await hasAdminAccess(q.from.id)){const [,pi,ci]=action.split(':');const a=adminView();setProductCategory(q.from.id,a.products[Number(pi)]?.id,a.categories[Number(ci)]?.id);await show(q.message.chat.id,q.from,`admin_product:${pi}`,q.message.message_id)}
       else if(action.startsWith('price_edit:')&&await hasAdminAccess(q.from.id)){const p=adminView().products[Number(action.slice(11))];pendingInput.set(q.from.id,{type:'price',id:p?.id});await tgApi('sendMessage',{chat_id:q.message.chat.id,text:'Введите новую цену числом в рублях:'})}
       else if(action.startsWith('codes_add:')&&await hasAdminAccess(q.from.id)){const p=adminView().products[Number(action.slice(10))];pendingInput.set(q.from.id,{type:'codes',id:p?.id});await tgApi('sendMessage',{chat_id:q.message.chat.id,text:'Отправьте коды активации: один код на строку. Логины и пароли не принимаются.'})}
+      else if(action==='admin_from_text'&&await hasAdminAccess(q.from.id)){
+        await tgApi('deleteMessage',{chat_id:q.message.chat.id,message_id:q.message.message_id});
+        setUiMessage(q.message.chat.id,null);
+        await show(q.message.chat.id,q.from,'admin',null);
+      }
       else if(action==='admin_toggle_bot'&&await hasAdminAccess(q.from.id)){setBotEnabled(q.from.id,!isBotEnabled());await show(q.message.chat.id,q.from,'admin',q.message.message_id)}
       else if(action==='admin_broadcast_send'&&await hasAdminAccess(q.from.id)){const text=broadcastDrafts.get(q.from.id);if(!text)throw Error('Черновик рассылки не найден. Создайте рассылку заново.');broadcastDrafts.delete(q.from.id);await tgApi('editMessageText',{chat_id:q.message.chat.id,message_id:q.message.message_id,text:'📣 Рассылка запущена…'});const result=await sendBroadcast(text);await tgApi('editMessageText',{chat_id:q.message.chat.id,message_id:q.message.message_id,text:`✅ <b>Рассылка завершена</b>\n\nВсего пользователей: ${result.total}\nДоставлено: ${result.sent}\nНе доставлено: ${result.failed}`,parse_mode:'HTML',reply_markup:{inline_keyboard:[[button('← В админ-панель','admin')]]}})}
       else if(action.startsWith('approve:')&&await hasAdminAccess(q.from.id)){const t=approveTopup(q.from.id,action.slice(8));await notify(t.userId,`✅ Баланс пополнен на <b>${money(t.amount)}</b>.`);await show(q.message.chat.id,q.from,'admin_topups',q.message.message_id)}
