@@ -25,6 +25,13 @@ export const config = {
     apiKey: process.env.HELEKET_PAYMENT_API_KEY || '',
     baseUrl: (process.env.HELEKET_API_URL || 'https://api.heleket.com').replace(/\/$/, ''),
   },
+  lzt: {
+    apiToken: process.env.LZT_API_TOKEN || process.env.LZT_TOKEN || '',
+    merchantId: process.env.LZT_MERCHANT_ID || '',
+    merchantToken: process.env.LZT_MERCHANT_TOKEN || '',
+    currency: process.env.LZT_CURRENCY || 'RUB',
+    baseUrl: (process.env.LZT_API_URL || 'https://prod-api.lzt.market').replace(/\/$/, ''),
+  },
   buttonEmoji: {
     cryptoBot: process.env.CRYPTOPAY_BUTTON_EMOJI_ID || '',
     heleket: process.env.HELEKET_BUTTON_EMOJI_ID || '',

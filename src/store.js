@@ -130,9 +130,9 @@ export function requestTopup(user, amount, method='sbp'){
     db.users[userKey].name=user.first_name||user.username||db.users[userKey].name||'Пользователь';
     db.users[userKey].username=user.username||'';
   }
-  const validMethods = ['sbp','sbp14','cryptobot','heleket']; 
+  const validMethods = ['sbp','sbp14','cryptobot','heleket','lzt']; 
   if(!validMethods.includes(method)) throw Error('Способ оплаты недоступен'); 
-  const feeRates = { 'sbp': 0.14, 'sbp14': 0.14, 'cryptobot': 0, 'heleket': 0 }; 
+  const feeRates = { 'sbp': 0.14, 'sbp14': 0.14, 'cryptobot': 0, 'heleket': 0, 'lzt': 0 }; 
   const feeRate = feeRates[method] || 0; 
   const feeAmount = Math.round(amount * feeRate * 100) / 100; 
   const paymentAmount = Math.round((amount + feeAmount) * 100) / 100; 
@@ -222,6 +222,40 @@ export function getPendingHeleketTopups(){
     .map(t=>({...t}));
 }
 
+export function attachLztInvoice(topupId,invoiceId,paymentUrl){
+  const t=db.topups.find(x=>x.id===topupId&&x.method==='lzt'&&x.status==='pending');
+  if(!t) throw Error('Заявка LZT Market не найдена');
+  const normalized=String(invoiceId);
+  if(db.topups.some(x=>String(x.lztInvoiceId)===normalized&&x.id!==topupId)) throw Error('Счёт LZT Market уже зарегистрирован');
+  t.lztInvoiceId=normalized;
+  t.paymentUrl=paymentUrl;
+  t.gatewayStatus='not_paid';
+  save();
+  return t;
+}
+
+export function settleLztInvoice(topupId,invoiceId,amount){
+  const t=db.topups.find(x=>x.method==='lzt'&&(x.id===String(topupId)||String(x.lztInvoiceId)===String(invoiceId)));
+  if(!t||String(t.lztInvoiceId)!==String(invoiceId)) throw Error('Счёт LZT Market не найден');
+  if(Number(t.amount)!==Number(amount)) throw Error('Сумма счёта LZT Market не совпадает');
+  const newlyApproved=t.status==='pending';
+  if(newlyApproved){
+    const u=db.users[String(t.userId)];
+    if(!u) throw Error('Пользователь не найден');
+    t.status='approved';
+    t.gatewayStatus='paid';
+    t.approvedAt=new Date().toISOString();
+    u.balance+=t.amount;
+    audit('lzt','topup_confirmed',t.id);
+    save();
+  }
+  return {...t,newlyApproved};
+}
+
+export function getPendingLztTopups(){
+  return db.topups.filter(t=>t.method==='lzt'&&t.status==='pending'&&t.lztInvoiceId).map(t=>({...t}));
+}
+
 export function failTopup(topupId,reason){
   const t=db.topups.find(x=>x.id===topupId&&x.status==='pending');
   if(t){
@@ -253,7 +287,7 @@ export function addCodes(adminId,productId,values){
 export function approveTopup(adminId,topupId){ 
   const t=db.topups.find(x=>x.id===topupId); 
   if(!t||t.status!=='pending') throw Error('Заявка уже обработана'); 
-  if(t.cryptoPayInvoiceId||t.heleketInvoiceId) throw Error('Автоматический счёт подтверждается только через платёжную систему');
+  if(t.cryptoPayInvoiceId||t.heleketInvoiceId||t.lztInvoiceId) throw Error('Автоматический счёт подтверждается только через платёжную систему');
   t.status='approved';
   t.approvedAt=new Date().toISOString();
   db.users[String(t.userId)].balance+=t.amount; 
