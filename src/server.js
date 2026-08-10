@@ -6,14 +6,15 @@ import { verifyTelegram } from './security.js';
 import { createCryptoPayInvoice,cryptoPayReady,getCryptoPayInvoice,getCryptoPayInvoices,verifyCryptoPayWebhook } from './cryptobot.js';
 import { createHeleketInvoice,getHeleketInvoice,heleketReady,verifyHeleketWebhook } from './heleket.js';
 import { createLztInvoice,getLztInvoice,lztReady,verifyLztWebhook } from './lzt.js';
-import { userView,adminView,buy,requestTopup,attachCryptoPayInvoice,attachHeleketInvoice,attachLztInvoice,failTopup,settleCryptoPayInvoice,settleHeleketInvoice,settleLztInvoice,addCodes,approveTopup,addProduct,archiveProduct,addCategory,toggleCategory,updateProductPrice,setProductCategory,createTicket,addTicketMessage,closeTicket,getUiMessage,setUiMessage,getButtonEmojis,setButtonEmojis,setLztButtonEmoji,setUserAgreed,hasUserAgreed,getAllUserIds,isBotEnabled,setBotEnabled,getPendingHeleketTopups,getPendingLztTopups,getRecentTopups } from './store.js';
+import { userView,adminView,buy,requestTopup,attachCryptoPayInvoice,attachHeleketInvoice,attachLztInvoice,failTopup,settleCryptoPayInvoice,settleHeleketInvoice,settleLztInvoice,addCodes,approveTopup,addProduct,archiveProduct,addCategory,toggleCategory,updateProductPrice,setProductCategory,createTicket,addTicketMessage,closeTicket,getUiMessage,setUiMessage,getButtonEmojis,setButtonEmojis,setLztButtonEmoji,setUserAgreed,hasUserAgreed,getAllUserIds,isBotEnabled,setBotEnabled,getPendingHeleketTopups,getPendingLztTopups,getRecentTopups,getUserLanguage,setUserLanguage } from './store.js';
+import { tr,localizeMarkup,languageMenu,languagePrompt } from './i18n.js';
 
 const types={'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8','.png':'image/png','.svg':'image/svg+xml'};
 const json=(res,status,data)=>{res.writeHead(status,{'content-type':'application/json; charset=utf-8','cache-control':'no-store'});res.end(JSON.stringify(data));};
 const rawBody=req=>new Promise((resolve,reject)=>{let s='';req.setEncoding('utf8');req.on('data',c=>{s+=c;if(s.length>1e6){reject(Error('Request body too large'));req.destroy()}});req.on('end',()=>resolve(s));req.on('error',reject)});
 const body=async req=>{const raw=await rawBody(req);return raw?JSON.parse(raw):{}};
 const auth=req=>verifyTelegram(req.headers['x-telegram-init-data']||'');
-const notify=async(chatId,text)=>{if(config.token) await fetch(`https://api.telegram.org/bot${config.token}/sendMessage`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({chat_id:chatId,text,parse_mode:'HTML'})});};
+const notify=async(chatId,text)=>{if(config.token) await fetch(`https://api.telegram.org/bot${config.token}/sendMessage`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({chat_id:chatId,text:tr(text,getUserLanguage(chatId)),parse_mode:'HTML'})});};
 async function settleCryptoInvoiceData(invoice){
   if(!invoice||invoice.status!=='paid')return {invoice,settled:null};
   if(invoice.currency_type!=='fiat'||String(invoice.fiat).toUpperCase()!=='RUB'||String(invoice.paid_asset).toUpperCase()!=='USDT')throw Error('Данные оплаты CryptoBot не совпадают');
@@ -108,6 +109,8 @@ async function logTelegramError(method,response){
 }
 
 const tgApi=async(method,payload)=>{
+  const lang=payload.chat_id?getUserLanguage(payload.chat_id):null;
+  if(lang==='en')payload={...payload,...(typeof payload.text==='string'?{text:tr(payload.text,lang)}:{}),...(typeof payload.caption==='string'?{caption:tr(payload.caption,lang)}:{}),...(payload.media&&typeof payload.media.caption==='string'?{media:{...payload.media,caption:tr(payload.media.caption,lang)}}:{}),...(payload.reply_markup?{reply_markup:localizeMarkup(payload.reply_markup,lang)}:{})};
   const request=(name,data)=>fetch(`https://api.telegram.org/bot${config.token}/${name}`,{
     method:'POST',
     headers:{'content-type':'application/json'},
@@ -171,7 +174,7 @@ const pendingInput=new Map();
 const broadcastDrafts=new Map();
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 
-const menu=(user,admin)=>({inline_keyboard:[[button('🛍 Каталог','catalog','primary'),button('👤 Кабинет','profile')],[button('📦 Покупки','orders'),button('💳 Пополнить','topup')],[button('📜 Правила','rules'),button('💬 Поддержка','support')],[button('🔒 Политика конфиденциальности','privacy')],[button('📄 Пользовательское соглашение','terms')],...(admin?[[button('⚙️ Админ-панель','admin')]]:[])]});
+const menu=(user,admin)=>({inline_keyboard:[[button('🛍 Каталог','catalog','primary'),button('👤 Кабинет','profile')],[button('📦 Покупки','orders'),button('💳 Пополнить','topup')],[button('📜 Правила','rules'),button('💬 Поддержка','support')],[button('🔒 Политика конфиденциальности','privacy')],[button('📄 Пользовательское соглашение','terms')],[button('🌐 Язык','language')],...(admin?[[button('⚙️ Админ-панель','admin')]]:[])]});
 
 const welcomeMenu = () => ({
   inline_keyboard: [
@@ -181,7 +184,7 @@ const welcomeMenu = () => ({
   ]
 });
 
-const quickSections=new Map([['🛍 Каталог','catalog'],['👤 Кабинет','profile'],['📦 Покупки','orders'],['💳 Пополнить','topup'],['💬 Поддержка','support']]);
+const quickSections=new Map([['🛍 Каталог','catalog'],['🛍 Catalog','catalog'],['👤 Кабинет','profile'],['👤 Profile','profile'],['📦 Покупки','orders'],['📦 Purchases','orders'],['💳 Пополнить','topup'],['💳 Add funds','topup'],['💬 Поддержка','support'],['💬 Support','support']]);
 const quickMenu=()=>({keyboard:[[{text:'🛍 Каталог'},{text:'👤 Кабинет'}],[{text:'📦 Покупки'},{text:'💳 Пополнить'}],[{text:'💬 Поддержка'}]],resize_keyboard:true,is_persistent:true,input_field_placeholder:'Выберите раздел NAREVO'});
 const paymentButton=(label,fallbackIcon,callback,style,customIcon)=>button(`${customIcon?'':`${fallbackIcon} `}${label}`,callback,style,customIcon);
 const paymentEmojis=()=>({...config.buttonEmoji,...getButtonEmojis()});
@@ -197,7 +200,7 @@ const paymentLabel=method=>{
 };
 const topupSummary=t=>{const payable=Number(t.displayAmount??t.paymentAmount??t.amount);const fee=Math.round((payable-Number(t.amount))*100)/100;return `На баланс: <b>${money(t.amount)}</b>\nКомиссия: <b>${money(fee)}</b>\nК оплате: <b>${money(payable)}</b>`};
 async function installQuickMenu(chatId){const response=await tgApi('sendMessage',{chat_id:chatId,text:'Быстрое меню включено.',reply_markup:quickMenu()});if(response.ok){const sent=await response.clone().json();await tgApi('deleteMessage',{chat_id:chatId,message_id:sent.result.message_id})}}
-const imageForSection=section=>{let name='catalog';if(section==='home')return config.productImageUrl;if(section==='profile')name='profile';else if(section==='orders')name='orders';else if(section==='topup'||section.startsWith('paymethod:')||section.startsWith('topup_custom:'))name='pay';else if(section==='rules'||section.startsWith('rule:'))name='rules';else if(section==='support'||section.startsWith('ticket:'))name='support';else if(section.startsWith('admin')||section.startsWith('category_')||section.startsWith('product_')||section.startsWith('price_')||section.startsWith('codes_'))name='admin';else if(section==='privacy'||section==='terms'||section==='agree'||section==='welcome')name='rules';return `${config.sectionImageBaseUrl}/section-${name}.png?v=1`};
+const imageForSection=section=>{let name='catalog';if(section==='home')return config.productImageUrl;if(section==='language')name='language';else if(section==='profile')name='profile';else if(section==='orders')name='orders';else if(section==='topup'||section.startsWith('paymethod:')||section.startsWith('topup_custom:'))name='pay';else if(section==='rules'||section.startsWith('rule:'))name='rules';else if(section==='support'||section.startsWith('ticket:'))name='support';else if(section.startsWith('admin')||section.startsWith('category_')||section.startsWith('product_')||section.startsWith('price_')||section.startsWith('codes_'))name='admin';else if(section==='privacy'||section==='terms'||section==='agree'||section==='welcome')name='rules';return `${config.sectionImageBaseUrl}/section-${name}.png?v=1`};
 async function startCryptoBotTopup(user,amount){if(!cryptoPayReady(config))throw Error('CryptoBot пока не настроен');const topup=requestTopup(user,amount,'cryptobot');try{const invoice=await createCryptoPayInvoice(config,{amount:topup.amount,userId:user.id,topupId:topup.id});return attachCryptoPayInvoice(topup.id,invoice.invoiceId,invoice.paymentUrl)}catch(e){failTopup(topup.id,e.message);throw e}}
 async function startHeleketTopup(user,amount){if(!heleketReady(config))throw Error('Heleket пока не настроен');const topup=requestTopup(user,amount,'heleket');try{const invoice=await createHeleketInvoice(config,{amount:topup.amount,topupId:topup.id});return attachHeleketInvoice(topup.id,invoice.invoiceId,invoice.paymentUrl)}catch(e){failTopup(topup.id,e.message);throw e}}
 async function startLztTopup(user,amount){if(!lztReady(config))throw Error('LZT Market пока не настроен');const topup=requestTopup(user,amount,'lzt');try{const invoice=await createLztInvoice(config,{amount:topup.amount,topupId:topup.id,user});return attachLztInvoice(topup.id,invoice.invoiceId,invoice.paymentUrl)}catch(e){failTopup(topup.id,e.message);throw e}}
@@ -298,7 +301,35 @@ async function showMaintenance(chatId){
   if(response.ok){const data=await response.clone().json();setUiMessage(chatId,data.result.message_id)}
 }
 
-function getPrivacyPolicy() {
+function getPrivacyPolicy(lang='ru') {
+  if(lang==='en')return `🔒 <b>NAREVO MAIL Privacy Policy</b>
+
+📅 Effective date: 07 August 2026
+
+<b>1. General</b>
+This Policy explains how NAREVO MAIL (Telegram bot @narevojournal) processes and protects user information. By using the Service, you accept this Policy.
+
+<b>2. Information we process</b>
+We may process your Telegram ID, display name and username, technical information, and your history of orders, payments and support requests. We do not request identity documents or other information that is not required to provide the Service.
+
+<b>3. Purposes</b>
+Information is used to operate the Service, process orders and payments, provide notifications and support, prevent abuse, and improve reliability.
+
+<b>4. Sharing</b>
+We do not sell personal data. Information may be shared only when required by law, when necessary to provide the Service through Telegram, hosting or payment providers, or with the user’s consent.
+
+<b>5. Storage and security</b>
+Information is retained only as long as reasonably necessary. We use reasonable organizational and technical safeguards, but no method of transmission over the internet can be guaranteed to be absolutely secure.
+
+<b>6. Your choices</b>
+You may request information, correction or deletion of your data through Support, subject to applicable legal and transaction-record obligations.
+
+<b>7. Updates</b>
+The current version is always available in the bot. Continued use after an update means acceptance of the revised Policy.
+
+<b>8. Contact</b>
+Email: narevojournal@proton.me
+Telegram: @narevojournal`;
   return `🔒 <b>Политика конфиденциальности NAREVO MAIL</b>
 
 📅 Актуальная версия: 07.08.2026
@@ -357,7 +388,41 @@ function getPrivacyPolicy() {
 • Telegram: @narevojournal`;
 }
 
-function getTermsOfService() {
+function getTermsOfService(lang='ru') {
+  if(lang==='en')return `📋 <b>NAREVO MAIL Terms of Service</b>
+
+📅 Effective date: 07 August 2026
+
+<b>1. Acceptance</b>
+These Terms govern use of NAREVO MAIL (Telegram bot @narevojournal). By starting the bot, placing an order or paying for a product, you confirm that you have read and accepted these Terms.
+
+<b>2. Digital products</b>
+The Service offers official digital subscription codes. Product name, validity period, price, availability and other material conditions are displayed before purchase. The user is responsible for checking compatibility and regional conditions before payment.
+
+<b>3. Orders and delivery</b>
+An order is created after payment is confirmed or sufficient balance is available. A purchased digital code is delivered inside the bot. The user must keep issued codes confidential.
+
+<b>4. Payments</b>
+The total amount and any provider fee are shown before payment. Payment processing may be performed by third-party providers under their own terms.
+
+<b>5. Refunds and issues</b>
+Contact Support within 24 hours if a paid code was not delivered or is technically invalid. We will investigate and, where the issue is confirmed, provide a replacement or refund. A valid code that has already been revealed, activated or used is generally non-refundable, except where required by law.
+
+<b>6. Acceptable use</b>
+The Service may not be used for unlawful activity, fraud, abuse, unauthorized resale or interference with its operation. Access may be limited for violations or where required by law or payment providers.
+
+<b>7. Availability and liability</b>
+The Service is provided “as is”. Temporary maintenance and third-party outages may occur. Nothing in these Terms excludes liability that cannot legally be excluded.
+
+<b>8. Privacy</b>
+Personal information is processed as described in the Privacy Policy available in the bot.
+
+<b>9. Updates</b>
+The current version is always available in the bot. Continued use after an update means acceptance of the revised Terms.
+
+<b>10. Contact</b>
+Email: narevojournal@proton.me
+Telegram: @narevojournal`;
   return `📋 <b>Пользовательское соглашение NAREVO MAIL</b>
 
 📅 Актуальная версия: 07.08.2026
@@ -463,7 +528,27 @@ async function showWelcome(chatId,user,messageId){
   await replaceUiWithText(chatId,messageId,text,welcomeMenu());
 }
 
+async function showLanguage(chatId,messageId){
+  const currentId=messageId||getUiMessage(chatId);
+  if(currentId)await tgApi('deleteMessage',{chat_id:chatId,message_id:currentId});
+  setUiMessage(chatId,null);
+  const response=await tgApi('sendPhoto',{
+    chat_id:chatId,
+    photo:imageForSection('language'),
+    caption:languagePrompt,
+    parse_mode:'HTML',
+    reply_markup:languageMenu()
+  });
+  if(!response.ok){await replaceUiWithText(chatId,null,languagePrompt,languageMenu());return}
+  const sent=await response.clone().json();
+  setUiMessage(chatId,sent.result.message_id);
+}
+
 async function show(chatId,user,section,messageId){
+  if(section==='language'){
+    await showLanguage(chatId,messageId);
+    return;
+  }
   if(section==='home'){
     await replaceUiWithHome(chatId,user,messageId);
     return;
@@ -473,7 +558,7 @@ async function show(chatId,user,section,messageId){
     await replaceUiWithText(
       chatId,
       messageId,
-      getPrivacyPolicy(),
+      getPrivacyPolicy(getUserLanguage(user.id)),
       {inline_keyboard:[[button('← Назад',hasUserAgreed(user.id)?'home':'welcome')]]}
     );
     return;
@@ -483,7 +568,7 @@ async function show(chatId,user,section,messageId){
     await replaceUiWithText(
       chatId,
       messageId,
-      getTermsOfService(),
+      getTermsOfService(getUserLanguage(user.id)),
       {inline_keyboard:[[button('← Назад',hasUserAgreed(user.id)?'home':'welcome')]]}
     );
     return;
@@ -614,8 +699,14 @@ async function botLoop(offset=0){if(!config.token)return;try{const r=await fetch
     }
     if(m?.text==='/start'||m?.text==='/menu'){
       const oldId=getUiMessage(m.chat.id);
-      if(oldId)await tgApi('deleteMessage',{chat_id:m.chat.id,message_id:oldId});
+      if(oldId){await tgApi('deleteMessage',{chat_id:m.chat.id,message_id:oldId});setUiMessage(m.chat.id,null)}
       
+      userView(m.from);
+      if(!getUserLanguage(m.from.id)) {
+        await showLanguage(m.chat.id,null);
+        continue;
+      }
+
       if(!hasUserAgreed(m.from.id)) {
         await installQuickMenu(m.chat.id);
         await showWelcome(m.chat.id, m.from, null);
@@ -663,6 +754,19 @@ async function botLoop(offset=0){if(!config.token)return;try{const r=await fetch
       }catch(e){if(task.type==='topup_custom'){pendingInput.set(m.from.id,task);await tgApi('sendMessage',{chat_id:m.chat.id,text:`Введите сумму ещё раз. ${e.message}`})}else{pendingInput.delete(m.from.id);await tgApi('sendMessage',{chat_id:m.chat.id,text:`Ошибка: ${e.message}`})}}}
     
     if(q){await tgApi('answerCallbackQuery',{callback_query_id:q.id});const action=q.data;try{
+      if(action.startsWith('lang:')){
+        setUserLanguage(q.from.id,action.slice(5));
+        await installQuickMenu(q.message.chat.id);
+        if(hasUserAgreed(q.from.id))await show(q.message.chat.id,q.from,'home',q.message.message_id);
+        else await showWelcome(q.message.chat.id,q.from,q.message.message_id);
+        continue;
+      }
+
+      if(!getUserLanguage(q.from.id)){
+        await showLanguage(q.message.chat.id,q.message.message_id);
+        continue;
+      }
+
       if(action === 'agree'){
         setUserAgreed(q.from.id);
         await installQuickMenu(q.message.chat.id);

@@ -488,6 +488,20 @@ export function hasUserAgreed(userId) {
   return db.users[key] && db.users[key].agreed === true;
 }
 
+export function getUserLanguage(userId){
+  const value=db.users[String(userId)]?.language;
+  return value==='en'?'en':value==='ru'?'ru':null;
+}
+
+export function setUserLanguage(userId,language){
+  if(!['ru','en'].includes(language))throw Error('Unsupported language');
+  const key=String(userId);
+  if(!db.users[key])db.users[key]={id:userId,name:'Пользователь',username:'',balance:0,joinedAt:new Date().toISOString(),agreed:false};
+  db.users[key].language=language;
+  save();
+  return language;
+}
+
 function ticketView(t){
   return {...t, messages: t.messages.slice(-20)};
 }
