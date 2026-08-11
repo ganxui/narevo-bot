@@ -256,6 +256,41 @@ export function getPendingLztTopups(){
   return db.topups.filter(t=>t.method==='lzt'&&t.status==='pending'&&t.lztInvoiceId).map(t=>({...t}));
 }
 
+export function attachCasheraSbpTransaction(topupId,transactionUuid,paymentUrl){
+  const t=db.topups.find(x=>x.id===topupId&&x.method==='sbp'&&x.status==='pending');
+  if(!t) throw Error('Заявка СБП не найдена');
+  const normalized=String(transactionUuid);
+  if(db.topups.some(x=>String(x.casheraTransactionUuid)===normalized&&x.id!==topupId)) throw Error('Платёж Cashera уже зарегистрирован');
+  t.casheraTransactionUuid=normalized;
+  t.paymentUrl=paymentUrl;
+  t.gatewayStatus='pending';
+  save();
+  return t;
+}
+
+export function settleCasheraSbpTransaction(topupId,transactionUuid,amountMinor){
+  const t=db.topups.find(x=>x.method==='sbp'&&(x.id===String(topupId)||String(x.casheraTransactionUuid)===String(transactionUuid)));
+  if(!t||String(t.casheraTransactionUuid)!==String(transactionUuid)) throw Error('Платёж Cashera СБП не найден');
+  const expectedMinor=Math.round(Number(t.paymentAmount)*100);
+  if(expectedMinor!==Number(amountMinor)) throw Error('Сумма платежа Cashera не совпадает');
+  const newlyApproved=t.status==='pending';
+  if(newlyApproved){
+    const u=db.users[String(t.userId)];
+    if(!u) throw Error('Пользователь не найден');
+    t.status='approved';
+    t.gatewayStatus='paid';
+    t.approvedAt=new Date().toISOString();
+    u.balance+=t.amount;
+    audit('cashera','topup_confirmed',t.id);
+    save();
+  }
+  return {...t,newlyApproved};
+}
+
+export function getPendingCasheraSbpTopups(){
+  return db.topups.filter(t=>t.method==='sbp'&&t.status==='pending'&&t.casheraTransactionUuid).map(t=>({...t}));
+}
+
 export function failTopup(topupId,reason){
   const t=db.topups.find(x=>x.id===topupId&&x.status==='pending');
   if(t){

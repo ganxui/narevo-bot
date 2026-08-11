@@ -33,6 +33,12 @@ export const config = {
     baseUrl: (process.env.LZT_API_URL || 'https://prod-api.lzt.market').replace(/\/$/, ''),
     successUrl: process.env.LZT_SUCCESS_URL || 'https://t.me/narevo_bot',
   },
+  cashera: {
+    apiKey: process.env.CASHERA_API_KEY || '',
+    apiSecret: process.env.CASHERA_API_SECRET || '',
+    baseUrl: (process.env.CASHERA_API_URL || 'https://api.cashera.cash/api/v1').replace(/\/$/, ''),
+    callbackUrl: process.env.CASHERA_CALLBACK_URL || '',
+  },
   buttonEmoji: {
     cryptoBot: process.env.CRYPTOPAY_BUTTON_EMOJI_ID || '',
     heleket: process.env.HELEKET_BUTTON_EMOJI_ID || '',
