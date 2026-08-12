@@ -24,6 +24,7 @@ db.categories ||= structuredClone(seed.categories);
 db.tickets ||= []; 
 db.uiMessages ||= {}; 
 db.settings ||= {}; 
+db.casheraWebhookEvents ||= [];
 for(const p of db.products) p.categoryId ||= 'mail';
 
 const save = () => { 
@@ -256,35 +257,104 @@ export function getPendingLztTopups(){
   return db.topups.filter(t=>t.method==='lzt'&&t.status==='pending'&&t.lztInvoiceId).map(t=>({...t}));
 }
 
-export function attachCasheraSbpTransaction(topupId,transactionUuid,paymentUrl){
-  const t=db.topups.find(x=>x.id===topupId&&x.method==='sbp'&&x.status==='pending');
+export function attachCasheraSbpTransaction(topupId,transaction,paymentUrl){
+  const t=db.topups.find(x=>x.id===String(topupId)&&x.method==='sbp'&&['pending','approved'].includes(x.status));
   if(!t) throw Error('Заявка СБП не найдена');
-  const normalized=String(transactionUuid);
-  if(db.topups.some(x=>String(x.casheraTransactionUuid)===normalized&&x.id!==topupId)) throw Error('Платёж Cashera уже зарегистрирован');
+  const tx=transaction&&typeof transaction==='object'?transaction:{uuid:transaction,payment_url:paymentUrl,status:'pending'};
+  const normalized=String(tx.uuid||'');
+  if(!normalized) throw Error('Cashera не вернула uuid транзакции');
+  if(db.topups.some(x=>String(x.casheraTransactionUuid)===normalized&&x.id!==t.id)) throw Error('Платёж Cashera уже зарегистрирован');
+  const now=new Date().toISOString();
+  const expectedMinor=Math.round(Number(t.paymentAmount)*100);
+  t.casheraExternalId=String(tx.external_id||t.id);
   t.casheraTransactionUuid=normalized;
-  t.paymentUrl=paymentUrl;
-  t.gatewayStatus='pending';
+  t.paymentUrl=String(tx.payment_url||paymentUrl||t.paymentUrl||'');
+  t.gatewayStatus=String(tx.status||'pending');
+  t.casheraStatus=t.gatewayStatus;
+  t.casheraAmountMinor=Number.isFinite(Number(tx.amount))?Number(tx.amount):expectedMinor;
+  t.casheraCurrency=String(tx.currency||'RUB').toUpperCase();
+  t.casheraCreatedAt=tx.created_at||t.casheraCreatedAt||now;
+  t.casheraUpdatedAt=tx.updated_at||now;
   save();
   return t;
 }
 
-export function settleCasheraSbpTransaction(topupId,transactionUuid,amountMinor){
-  const t=db.topups.find(x=>x.method==='sbp'&&(x.id===String(topupId)||String(x.casheraTransactionUuid)===String(transactionUuid)));
-  if(!t||String(t.casheraTransactionUuid)!==String(transactionUuid)) throw Error('Платёж Cashera СБП не найден');
+const finalCasheraFailures=new Set(['failed','expired','refunded','chargeback']);
+
+export function syncCasheraSbpTransaction(transaction){
+  const tx=transaction||{};
+  const uuid=String(tx.uuid||'');
+  const externalId=String(tx.external_id||'');
+  const status=String(tx.status||'').toLowerCase();
+  if(!uuid||!externalId||!status) throw Error('Cashera вернула неполные данные транзакции');
+  const t=db.topups.find(x=>x.method==='sbp'&&(x.id===externalId||String(x.casheraExternalId)===externalId||String(x.casheraTransactionUuid)===uuid));
+  if(!t) throw Error('Платёж Cashera СБП не найден');
+  if(t.id!==externalId&&String(t.casheraExternalId||'')!==externalId) throw Error('external_id Cashera не совпадает с заявкой');
+  if(t.casheraTransactionUuid&&String(t.casheraTransactionUuid)!==uuid) throw Error('uuid Cashera не совпадает с заявкой');
+
+  const now=new Date().toISOString();
+  const currency=String(tx.currency||t.casheraCurrency||'').toUpperCase();
+  const amountMinor=Number(tx.amount);
   const expectedMinor=Math.round(Number(t.paymentAmount)*100);
-  if(expectedMinor!==Number(amountMinor)) throw Error('Сумма платежа Cashera не совпадает');
-  const newlyApproved=t.status==='pending';
-  if(newlyApproved){
+  const method=String(tx.payment_method||'').toLowerCase();
+
+  if(status==='paid'){
+    if(!Number.isInteger(amountMinor)||amountMinor!==expectedMinor) throw Error('Сумма платежа Cashera не совпадает');
+    if(currency!=='RUB') throw Error('Валюта платежа Cashera не совпадает');
+    if(method!=='sbp') throw Error('Метод платежа Cashera не совпадает');
+  }
+
+  t.casheraExternalId=externalId;
+  t.casheraTransactionUuid=uuid;
+  t.gatewayStatus=status;
+  t.casheraStatus=status;
+  if(Number.isFinite(amountMinor))t.casheraAmountMinor=amountMinor;
+  if(currency)t.casheraCurrency=currency;
+  t.casheraCreatedAt=tx.created_at||t.casheraCreatedAt||t.createdAt||now;
+  t.casheraUpdatedAt=tx.updated_at||now;
+  if(tx.paid_at)t.casheraPaidAt=tx.paid_at;
+
+  let newlyApproved=false;
+  if(status==='paid'&&t.status==='pending'){
     const u=db.users[String(t.userId)];
     if(!u) throw Error('Пользователь не найден');
     t.status='approved';
-    t.gatewayStatus='paid';
-    t.approvedAt=new Date().toISOString();
+    t.approvedAt=tx.paid_at||now;
     u.balance+=t.amount;
+    newlyApproved=true;
     audit('cashera','topup_confirmed',t.id);
-    save();
+  }else if(finalCasheraFailures.has(status)&&t.status==='pending'){
+    t.status='failed';
+    t.failureReason=`cashera_${status}`;
+    t.failedAt=now;
   }
+
+  save();
   return {...t,newlyApproved};
+}
+
+export function processCasheraWebhookTransaction(transaction){
+  const uuid=String(transaction?.uuid||'');
+  const status=String(transaction?.status||'').toLowerCase();
+  if(!uuid||!status) throw Error('Некорректное событие Cashera');
+  const eventKey=`${uuid}:${status}`;
+  if(db.casheraWebhookEvents.some(event=>event.key===eventKey))return {duplicate:true,newlyApproved:false};
+  const result=syncCasheraSbpTransaction(transaction);
+  db.casheraWebhookEvents.push({key:eventKey,uuid,status,processedAt:new Date().toISOString()});
+  if(db.casheraWebhookEvents.length>5000)db.casheraWebhookEvents.splice(0,db.casheraWebhookEvents.length-5000);
+  save();
+  return {...result,duplicate:false};
+}
+
+export function settleCasheraSbpTransaction(topupId,transactionUuid,amountMinor){
+  return syncCasheraSbpTransaction({
+    external_id:String(topupId),
+    uuid:String(transactionUuid),
+    status:'paid',
+    amount:Number(amountMinor),
+    currency:'RUB',
+    payment_method:'sbp'
+  });
 }
 
 export function getPendingCasheraSbpTopups(){
@@ -322,7 +392,7 @@ export function addCodes(adminId,productId,values){
 export function approveTopup(adminId,topupId){ 
   const t=db.topups.find(x=>x.id===topupId); 
   if(!t||t.status!=='pending') throw Error('Заявка уже обработана'); 
-  if(t.cryptoPayInvoiceId||t.heleketInvoiceId||t.lztInvoiceId) throw Error('Автоматический счёт подтверждается только через платёжную систему');
+  if(t.cryptoPayInvoiceId||t.heleketInvoiceId||t.lztInvoiceId||t.casheraTransactionUuid) throw Error('Автоматический счёт подтверждается только через платёжную систему');
   t.status='approved';
   t.approvedAt=new Date().toISOString();
   db.users[String(t.userId)].balance+=t.amount; 

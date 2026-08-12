@@ -7,10 +7,12 @@ if (fs.existsSync('.env')) {
   }
 }
 
+const publicUrl = (process.env.PUBLIC_URL || 'http://localhost:3000').replace(/\/$/, '');
+
 export const config = {
   port: Number(process.env.PORT || 3000),
   token: process.env.BOT_TOKEN || '',
-  publicUrl: (process.env.PUBLIC_URL || 'http://localhost:3000').replace(/\/$/, ''),
+  publicUrl,
   admins: new Set((process.env.ADMIN_IDS || '').split(',').filter(Boolean).map(Number)),
   adminChatId: Number(process.env.ADMIN_CHAT_ID || 0),
   productImageUrl: process.env.PRODUCT_IMAGE_URL || 'https://raw.githubusercontent.com/ganxui/narevo-bot/main/public/product-mail.png?v=2',
@@ -37,7 +39,9 @@ export const config = {
     apiKey: process.env.CASHERA_API_KEY || '',
     apiSecret: process.env.CASHERA_API_SECRET || '',
     baseUrl: (process.env.CASHERA_API_URL || 'https://api.cashera.cash/api/v1').replace(/\/$/, ''),
-    callbackUrl: process.env.CASHERA_CALLBACK_URL || '',
+    callbackUrl: `${publicUrl}/webhooks/cashera`,
+    successUrl: `${publicUrl}/pay/ok`,
+    failUrl: `${publicUrl}/pay/fail`,
   },
   buttonEmoji: {
     cryptoBot: process.env.CRYPTOPAY_BUTTON_EMOJI_ID || '',

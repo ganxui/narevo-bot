@@ -6,8 +6,8 @@ import { verifyTelegram } from './security.js';
 import { createCryptoPayInvoice,cryptoPayReady,getCryptoPayInvoice,getCryptoPayInvoices,verifyCryptoPayWebhook } from './cryptobot.js';
 import { createHeleketInvoice,getHeleketInvoice,heleketReady,verifyHeleketWebhook } from './heleket.js';
 import { createLztInvoice,getLztInvoice,lztReady,verifyLztWebhook } from './lzt.js';
-import { createCasheraSbpPayment,getCasheraTransaction,casheraReady,verifyCasheraWebhook } from './cashera.js';
-import { userView,adminView,buy,requestTopup,attachCryptoPayInvoice,attachHeleketInvoice,attachLztInvoice,attachCasheraSbpTransaction,failTopup,settleCryptoPayInvoice,settleHeleketInvoice,settleLztInvoice,settleCasheraSbpTransaction,addCodes,approveTopup,addProduct,archiveProduct,addCategory,toggleCategory,updateProductPrice,setProductCategory,createTicket,addTicketMessage,closeTicket,getUiMessage,setUiMessage,getButtonEmojis,setButtonEmojis,setLztButtonEmoji,setUserAgreed,hasUserAgreed,getAllUserIds,isBotEnabled,setBotEnabled,getPendingHeleketTopups,getPendingLztTopups,getPendingCasheraSbpTopups,getRecentTopups,getUserLanguage,setUserLanguage } from './store.js';
+import { createCasheraSbpPayment,getCasheraTransaction,getCasheraTransactionByExternalId,casheraReady,verifyCasheraWebhook } from './cashera.js';
+import { userView,adminView,buy,requestTopup,attachCryptoPayInvoice,attachHeleketInvoice,attachLztInvoice,attachCasheraSbpTransaction,failTopup,settleCryptoPayInvoice,settleHeleketInvoice,settleLztInvoice,syncCasheraSbpTransaction,processCasheraWebhookTransaction,addCodes,approveTopup,addProduct,archiveProduct,addCategory,toggleCategory,updateProductPrice,setProductCategory,createTicket,addTicketMessage,closeTicket,getUiMessage,setUiMessage,getButtonEmojis,setButtonEmojis,setLztButtonEmoji,setUserAgreed,hasUserAgreed,getAllUserIds,isBotEnabled,setBotEnabled,getPendingHeleketTopups,getPendingLztTopups,getPendingCasheraSbpTopups,getRecentTopups,getUserLanguage,setUserLanguage } from './store.js';
 import { tr,localizeMarkup,languageMenu,languagePrompt } from './i18n.js';
 
 const types={'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8','.png':'image/png','.svg':'image/svg+xml'};
@@ -77,15 +77,17 @@ async function reconcilePendingLztTopups(){
   }finally{lztReconcileRunning=false}
 }
 
-async function verifyAndSettleCasheraSbp(transactionUuid){
-  const transaction=await getCasheraTransaction(config,transactionUuid);
-  const status=transaction?.status;
-  if(status!=='paid')return {transaction,status,settled:null};
-  if(String(transaction.currency).toUpperCase()!=='RUB')throw Error('Валюта платежа Cashera не совпадает');
-  if(String(transaction.payment_method).toLowerCase()!=='sbp')throw Error('Метод платежа Cashera не совпадает');
-  const settled=settleCasheraSbpTransaction(transaction.external_id,transaction.uuid||transactionUuid,transaction.amount);
-  if(settled.newlyApproved)await notify(settled.userId,`✅ Cashera подтвердила оплату по СБП. Баланс пополнен на <b>${settled.amount} ₽</b>.`);
-  return {transaction,status,settled};
+async function verifyAndSettleCasheraSbp(transactionUuid,externalId){
+  let transaction;
+  try{transaction=await getCasheraTransaction(config,transactionUuid);}
+  catch(error){
+    if(!externalId)throw error;
+    transaction=await getCasheraTransactionByExternalId(config,externalId);
+  }
+  const status=String(transaction?.status||'').toLowerCase();
+  const synced=syncCasheraSbpTransaction(transaction);
+  if(synced.newlyApproved)await notify(synced.userId,`✅ Cashera подтвердила оплату по СБП. Баланс пополнен на <b>${synced.amount} ₽</b>.`);
+  return {transaction,status,settled:status==='paid'?synced:null,synced};
 }
 let casheraReconcileRunning=false;
 async function reconcilePendingCasheraSbpTopups(){
@@ -93,7 +95,7 @@ async function reconcilePendingCasheraSbpTopups(){
   casheraReconcileRunning=true;
   try{
     for(const topup of getPendingCasheraSbpTopups().slice(0,100)){
-      try{await verifyAndSettleCasheraSbp(topup.casheraTransactionUuid)}catch(e){console.error(`[Cashera reconcile] ${topup.id}: ${e.message}`)}
+      try{await verifyAndSettleCasheraSbp(topup.casheraTransactionUuid,topup.id)}catch(e){console.error(`[Cashera reconcile] ${topup.id}: ${e.message}`)}
     }
   }finally{casheraReconcileRunning=false}
 }
@@ -103,7 +105,26 @@ const server=http.createServer(async(req,res)=>{try{
   if(pathname==='/api/payments/cryptobot/webhook'&&req.method==='POST'){const raw=await rawBody(req);if(!verifyCryptoPayWebhook(config.cryptoPay.token,raw,req.headers['crypto-pay-api-signature']))return json(res,401,{error:'Invalid CryptoBot signature'});const update=JSON.parse(raw||'{}');if(update.update_type!=='invoice_paid')return json(res,200,{ok:true});await settleCryptoInvoiceData(update.payload);return json(res,200,{ok:true})}
   if(pathname==='/api/payments/heleket/webhook'&&req.method==='POST'){const raw=await rawBody(req);if(!verifyHeleketWebhook(raw,config.heleket.apiKey))return json(res,401,{error:'Invalid Heleket signature'});const update=JSON.parse(raw||'{}');if(update.type!=='payment'||!['paid','paid_over'].includes(update.status))return json(res,200,{ok:true});if(String(update.currency).toUpperCase()!=='RUB')return json(res,400,{error:'Heleket currency mismatch'});const settled=settleHeleketInvoice(update.order_id||update.additional_data,update.uuid,update.amount);if(settled.newlyApproved)await notify(settled.userId,`✅ Heleket подтвердил криптооплату. Баланс пополнен на <b>${settled.amount} ₽</b>.`);return json(res,200,{ok:true})}
   if(pathname==='/api/payments/lzt/webhook'&&req.method==='POST'){const raw=await rawBody(req);if(!verifyLztWebhook(config,req.headers['x-secret-key']))return json(res,401,{error:'Invalid LZT secret'});const update=JSON.parse(raw||'{}');if(update.status!=='paid')return json(res,200,{ok:true});if(Number(update.merchant_id)!==Number(config.lzt.merchantId))return json(res,400,{error:'LZT merchant mismatch'});if(String(update.currency||config.lzt.currency).toUpperCase()!==String(config.lzt.currency||'RUB').toUpperCase())return json(res,400,{error:'LZT currency mismatch'});const settled=settleLztInvoice(update.payment_id,update.invoice_id,update.amount);if(settled.newlyApproved)await notify(settled.userId,`✅ LZT Market подтвердил оплату. Баланс пополнен на <b>${settled.amount} ₽</b>.`);return json(res,200,{ok:true})}
-  if(pathname==='/api/payments/cashera/webhook'&&req.method==='POST'){const raw=await rawBody(req);if(!verifyCasheraWebhook(config,req.headers))return json(res,401,{error:'Invalid Cashera webhook credentials'});const update=JSON.parse(raw||'{}');const transaction=update?.transaction;if(update?.event!=='transaction.status_updated'||!transaction)return json(res,200,{ok:true});if(transaction.status!=='paid')return json(res,200,{ok:true});if(String(transaction.currency).toUpperCase()!=='RUB'||String(transaction.payment_method).toLowerCase()!=='sbp')return json(res,400,{error:'Cashera payment mismatch'});const settled=settleCasheraSbpTransaction(transaction.external_id,transaction.uuid,transaction.amount);if(settled.newlyApproved)await notify(settled.userId,`✅ Cashera подтвердила оплату по СБП. Баланс пополнен на <b>${settled.amount} ₽</b>.`);return json(res,200,{ok:true})}
+  if((pathname==='/webhooks/cashera'||pathname==='/api/payments/cashera/webhook')&&req.method==='POST'){
+    const raw=await rawBody(req);
+    if(!verifyCasheraWebhook(config,req.headers))return json(res,401,{error:'Invalid Cashera webhook credentials'});
+    let update;
+    try{update=JSON.parse(raw||'{}');}catch{return json(res,400,{error:'Invalid JSON'});}
+    const transaction=update?.transaction;
+    if(update?.event!=='transaction.status_updated'||!transaction)return json(res,200,{ok:true,ignored:true});
+    try{
+      const result=processCasheraWebhookTransaction(transaction);
+      if(result.newlyApproved)await notify(result.userId,`✅ Cashera подтвердила оплату по СБП. Баланс пополнен на <b>${result.amount} ₽</b>.`);
+      return json(res,200,{ok:true,duplicate:Boolean(result.duplicate)});
+    }catch(error){
+      console.error(`[Cashera webhook] событие отклонено: ${error.message}`);
+      return json(res,200,{ok:true,accepted:false});
+    }
+  }
+  if((pathname==='/pay/ok'||pathname==='/pay/fail')&&req.method==='GET'){
+    res.writeHead(302,{location:'https://t.me/narevo_bot','cache-control':'no-store'});
+    return res.end();
+  }
   if(req.url.startsWith('/api/')){const user=auth(req); const admin=config.admins.has(user.id)||(config.demo&&user.id===10001); const b=req.method==='POST'?await body(req):{};
     if(req.url==='/api/me'&&req.method==='GET') return json(res,200,{...userView(user),isAdmin:admin});
     if(req.url==='/api/buy'&&req.method==='POST'){const out=buy(user,b.productId);await notify(user.id,`✅ Заказ <b>${out.title}</b> выполнен. Код доступен в разделе «Покупки».`);return json(res,200,out)}
@@ -227,7 +248,7 @@ const imageForSection=section=>{let name='catalog';if(section==='home')return co
 async function startCryptoBotTopup(user,amount){if(!cryptoPayReady(config))throw Error('CryptoBot пока не настроен');const topup=requestTopup(user,amount,'cryptobot');try{const invoice=await createCryptoPayInvoice(config,{amount:topup.amount,userId:user.id,topupId:topup.id});return attachCryptoPayInvoice(topup.id,invoice.invoiceId,invoice.paymentUrl)}catch(e){failTopup(topup.id,e.message);throw e}}
 async function startHeleketTopup(user,amount){if(!heleketReady(config))throw Error('Heleket пока не настроен');const topup=requestTopup(user,amount,'heleket');try{const invoice=await createHeleketInvoice(config,{amount:topup.amount,topupId:topup.id});return attachHeleketInvoice(topup.id,invoice.invoiceId,invoice.paymentUrl)}catch(e){failTopup(topup.id,e.message);throw e}}
 async function startLztTopup(user,amount){if(!lztReady(config))throw Error('LZT Market пока не настроен');const topup=requestTopup(user,amount,'lzt');try{const invoice=await createLztInvoice(config,{amount:topup.amount,topupId:topup.id,user});return attachLztInvoice(topup.id,invoice.invoiceId,invoice.paymentUrl)}catch(e){failTopup(topup.id,e.message);throw e}}
-async function startCasheraSbpTopup(user,amount){if(!casheraReady(config))throw Error('Cashera СБП пока не настроен');const topup=requestTopup(user,amount,'sbp');try{const payment=await createCasheraSbpPayment(config,{paymentAmount:topup.paymentAmount,topupId:topup.id,user});return attachCasheraSbpTransaction(topup.id,payment.uuid,payment.paymentUrl)}catch(e){failTopup(topup.id,e.message);throw e}}
+async function startCasheraSbpTopup(user,amount){if(!casheraReady(config))throw Error('Cashera СБП пока не настроен: нужны CASHERA_API_KEY, CASHERA_API_SECRET и PUBLIC_URL=https://...');const topup=requestTopup(user,amount,'sbp');try{const payment=await createCasheraSbpPayment(config,{paymentAmount:topup.paymentAmount,topupId:topup.id});return attachCasheraSbpTransaction(topup.id,payment.transaction)}catch(e){failTopup(topup.id,e.message);throw e}}
 const heleketKeyboard=(invoiceId,paymentUrl,repeat=false)=>({inline_keyboard:[...(paymentUrl?[[linkButton('Оплатить через Heleket',paymentUrl,'primary')]]:[]),[button(repeat?'✅ Проверить ещё раз':'✅ Проверить оплату',`heleketcheck:${invoiceId}`,'success')],[button('← Главное меню','home')]]});
 const lztKeyboard=(invoiceId,paymentUrl,repeat=false)=>{const icon=paymentEmojis().lzt;return {inline_keyboard:[...(paymentUrl?[[linkButton('Оплатить через LZT Market',paymentUrl,'success',icon)]]:[]),[button(repeat?'✅ Проверить ещё раз':'✅ Проверить оплату',`lztcheck:${invoiceId}`,'success')],[button('← Главное меню','home')]]}};
 const casheraSbpKeyboard=(transactionUuid,paymentUrl,repeat=false)=>({inline_keyboard:[...(paymentUrl?[[linkButton('Оплатить по СБП',paymentUrl,'success')]]:[]),[button(repeat?'✅ Проверить ещё раз':'✅ Проверить оплату',`casheracheck:${transactionUuid}`,'success')],[button('← Главное меню','home')]]});
@@ -825,7 +846,25 @@ async function botLoop(offset=0){if(!config.token)return;try{const r=await fetch
       else if(action.startsWith('cryptocheck:')){const invoiceId=action.slice(12);const {invoice,settled}=await verifyAndSettleCryptoInvoice(invoiceId);if(settled)await show(q.message.chat.id,q.from,'profile',q.message.message_id);else if(invoice.status==='expired')await tgApi('editMessageText',{chat_id:q.message.chat.id,message_id:q.message.message_id,text:'<b>⌛ Счёт CryptoBot истёк</b>\n\nСоздайте новый счёт в разделе пополнения.',parse_mode:'HTML',reply_markup:{inline_keyboard:[[button('Создать новый счёт','paymethod:cryptobot','primary')],[button('← Главное меню','home')]]}});else{const paymentUrl=invoice.bot_invoice_url||invoice.mini_app_invoice_url||invoice.web_app_invoice_url;await tgApi('editMessageText',{chat_id:q.message.chat.id,message_id:q.message.message_id,text:`<b>⏳ Оплата пока не найдена</b>\n\nСумма: ${money(invoice.amount)}\nОплата: USDT\nОплатите счёт и повторите проверку.`,parse_mode:'HTML',reply_markup:{inline_keyboard:[[linkButton('Оплатить в CryptoBot',paymentUrl,'primary')],[button('✅ Проверить ещё раз',`cryptocheck:${invoice.invoice_id}`,'success')],[button('← Главное меню','home')]]}})}}
       else if(action.startsWith('heleketcheck:')){const invoiceId=action.slice(13);const {invoice,status,settled}=await verifyAndSettleHeleketInvoice(invoiceId);if(settled)await show(q.message.chat.id,q.from,'profile',q.message.message_id);else if(['cancel','fail','system_fail'].includes(status))await tgApi('editMessageText',{chat_id:q.message.chat.id,message_id:q.message.message_id,text:'<b>⌛ Счёт Heleket недоступен</b>\n\nСоздайте новый счёт в разделе пополнения.',parse_mode:'HTML',reply_markup:{inline_keyboard:[[button('Создать новый счёт','paymethod:heleket','primary')],[button('← Главное меню','home')]]}});else{await tgApi('editMessageText',{chat_id:q.message.chat.id,message_id:q.message.message_id,text:`<b>⏳ Оплата Heleket пока не подтверждена</b>\n\nСумма: ${money(invoice.amount)}\nСтатус: ${html(status||'pending')}\n\nОплатите счёт и повторите проверку.`,parse_mode:'HTML',reply_markup:heleketKeyboard(invoice.uuid||invoiceId,invoice.url,true)})}}
       else if(action.startsWith('lztcheck:')){const invoiceId=action.slice(9);const {invoice,status,settled}=await verifyAndSettleLztInvoice(invoiceId);if(settled)await show(q.message.chat.id,q.from,'profile',q.message.message_id);else{await tgApi('editMessageText',{chat_id:q.message.chat.id,message_id:q.message.message_id,text:`<b>⏳ Оплата LZT Market пока не подтверждена</b>\n\nСумма: ${money(invoice.amount)}\nСтатус: ${html(status||'not_paid')}\n\nОплатите счёт и повторите проверку.`,parse_mode:'HTML',reply_markup:lztKeyboard(invoice.invoice_id||invoiceId,invoice.url,true)})}}
-      else if(action.startsWith('casheracheck:')){const transactionUuid=action.slice(13);const {transaction,status,settled}=await verifyAndSettleCasheraSbp(transactionUuid);if(settled)await show(q.message.chat.id,q.from,'profile',q.message.message_id);else{await tgApi('editMessageText',{chat_id:q.message.chat.id,message_id:q.message.message_id,text:`<b>⏳ Оплата по СБП пока не подтверждена</b>\n\nК оплате: <b>${money(Number(transaction.amount)/100)}</b>\nСтатус: ${html(status||'pending')}\n\nОплатите счёт и повторите проверку.`,parse_mode:'HTML',reply_markup:casheraSbpKeyboard(transaction.uuid||transactionUuid,transaction.payment_url,true)})}}
+      else if(action.startsWith('casheracheck:')){
+        const transactionUuid=action.slice(13);
+        const {transaction,status,settled}=await verifyAndSettleCasheraSbp(transactionUuid);
+        if(settled)await show(q.message.chat.id,q.from,'profile',q.message.message_id);
+        else if(['failed','expired','refunded','chargeback'].includes(status)){
+          await tgApi('editMessageText',{chat_id:q.message.chat.id,message_id:q.message.message_id,text:`<b>❌ Платёж Cashera не завершён</b>
+
+Статус: ${html(status)}
+
+Создайте новый счёт в разделе пополнения.`,parse_mode:'HTML',reply_markup:{inline_keyboard:[[button('Создать новый счёт','paymethod:sbp','primary')],[button('← Главное меню','home')]]}});
+        }else{
+          await tgApi('editMessageText',{chat_id:q.message.chat.id,message_id:q.message.message_id,text:`<b>⏳ Оплата по СБП пока не подтверждена</b>
+
+К оплате: <b>${money(Number(transaction.amount)/100)}</b>
+Статус: ${html(status||'pending')}
+
+Оплатите счёт и повторите проверку.`,parse_mode:'HTML',reply_markup:casheraSbpKeyboard(transaction.uuid||transactionUuid,transaction.payment_url,true)});
+        }
+      }
       else if(action.startsWith('topup:')){const [,method,amount]=action.split(':');if(method==='cryptobot'){const t=await startCryptoBotTopup(q.from,Number(amount));await tgApi('editMessageText',{chat_id:q.message.chat.id,message_id:q.message.message_id,text:`<b>Счёт CryptoBot создан</b>\n\nСумма: ${money(t.amount)}\nОплата: USDT\nПосле оплаты вернитесь сюда и нажмите «Проверить оплату».`,parse_mode:'HTML',reply_markup:{inline_keyboard:[[linkButton('Оплатить в CryptoBot',t.paymentUrl,'primary')],[button('✅ Проверить оплату',`cryptocheck:${t.cryptoPayInvoiceId}`,'success')],[button('← Главное меню','home')]]}})}else if(method==='heleket'){const t=await startHeleketTopup(q.from,Number(amount));await tgApi('editMessageText',{chat_id:q.message.chat.id,message_id:q.message.message_id,text:`<b>Счёт Heleket создан</b>\n\nСумма: ${money(t.amount)}\nКриптовалюту и сеть выберите на странице оплаты.\nПосле оплаты вернитесь сюда и нажмите «Проверить оплату».`,parse_mode:'HTML',reply_markup:heleketKeyboard(t.heleketInvoiceId,t.paymentUrl)})}else if(method==='lzt'){const t=await startLztTopup(q.from,Number(amount));await tgApi('editMessageText',{chat_id:q.message.chat.id,message_id:q.message.message_id,text:`<b>Счёт LZT Market создан</b>\n\nСумма: ${money(t.amount)}\nПосле оплаты вернитесь сюда и нажмите «Проверить оплату».`,parse_mode:'HTML',reply_markup:lztKeyboard(t.lztInvoiceId,t.paymentUrl)})}else if(method==='sbp'){const t=await startCasheraSbpTopup(q.from,Number(amount));await tgApi('editMessageText',{chat_id:q.message.chat.id,message_id:q.message.message_id,text:`<b>Счёт СБП создан</b>\n\n${topupSummary(t)}\n\nПосле оплаты вернитесь сюда и нажмите «Проверить оплату».`,parse_mode:'HTML',reply_markup:casheraSbpKeyboard(t.casheraTransactionUuid,t.paymentUrl)})}else{const t=requestTopup(q.from,Number(amount),method);await tgApi('editMessageText',{chat_id:q.message.chat.id,message_id:q.message.message_id,text:`✅ Заявка на ${money(t.amount)} через ${paymentLabel(method)} создана.\nАдминистратор пришлёт реквизиты и подтвердит оплату.`,reply_markup:{inline_keyboard:[[{text:'🛟 Написать в поддержку',callback_data:'support'}],[{text:'‹ В меню',callback_data:'home'}]]}});for(const a of config.admins)await notify(a,`💳 Заявка ${method} на ${money(t.amount)} · пользователь ${q.from.id}`);if(config.adminChatId)await notify(config.adminChatId,`💳 Заявка ${method} на ${money(t.amount)} · пользователь ${q.from.id}`)}}
       else if(action==='ticket_new'){const t=createTicket(q.from);if(config.adminChatId)await notify(config.adminChatId,`🎫 Создан тикет <b>#${t.id}</b> от ${html(t.userName)}.`);await show(q.message.chat.id,q.from,`ticket:${t.id}`,q.message.message_id)}
       else if(action.startsWith('ticket_reply:')){pendingInput.set(q.from.id,{type:'ticket',id:action.slice(13)});await tgApi('sendMessage',{chat_id:q.message.chat.id,text:'✍️ Отправьте следующее сообщение — оно попадёт в тикет.'})}
