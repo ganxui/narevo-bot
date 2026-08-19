@@ -57,6 +57,22 @@ const EN_REPLACEMENTS = [
   ['Написать в поддержку', 'Contact support'], ['Заявка на', 'Request for'], ['создана.', 'created.'],
   ['Администратор пришлёт реквизиты и подтвердит оплату.', 'An administrator will send payment details and confirm the payment.'],
   ['Отправьте следующее сообщение — оно попадёт в тикет.', 'Send your next message and it will be added to the ticket.'],
+  ['Панель продавца', 'Seller panel'], ['Мои товары', 'My products'], ['Добавить товар', 'Add product'],
+  ['Пополнить товар', 'Add stock'], ['Заказы продавца', 'Seller orders'], ['Баланс и вывод', 'Balance and withdrawal'],
+  ['Статистика', 'Statistics'], ['Доступно к выводу:', 'Available to withdraw:'], ['В холде 72 часа:', 'Held for 72 hours:'],
+  ['В обязательном холде:', 'Mandatory hold:'], ['Холд всегда длится ровно 72 часа и не снимается досрочно.', 'The hold always lasts exactly 72 hours and cannot be released early.'],
+  ['Активных товаров:', 'Active products:'], ['Остаток:', 'Stock:'], ['Заказов на проверке:', 'Orders awaiting review:'],
+  ['Рейтинг:', 'Rating:'], ['Отзывов:', 'Reviews:'], ['Новый товар', 'New product'], ['Отправьте название товара.', 'Send the product name.'],
+  ['Выберите закреплённую категорию:', 'Choose an assigned category:'], ['Товаров пока нет.', 'No products yet.'],
+  ['Пополнение товара', 'Add stock'], ['Отправьте товарные единицы: одна строка — одна единица.', 'Send product units, one per line.'],
+  ['Подтвердите пополнение', 'Confirm stock addition'], ['Найдено строк:', 'Lines found:'], ['Добавить', 'Add'],
+  ['Подтверждение покупки', 'Confirm purchase'], ['Цена за 1 шт.:', 'Unit price:'], ['Итого:', 'Total:'],
+  ['После покупки:', 'After purchase:'], ['Подтвердить', 'Confirm'], ['Изменить количество', 'Change quantity'],
+  ['Другое количество', 'Custom quantity'], ['Количество товара', 'Product quantity'], ['Количество:', 'Quantity:'],
+  ['Проблема с заказом', 'Problem with order'], ['Оставить отзыв', 'Leave a review'], ['Выберите оценку:', 'Choose a rating:'],
+  ['Запросить вывод', 'Request withdrawal'], ['Заявки на вывод', 'Withdrawal requests'], ['Балансы пользователей', 'User balances'],
+  ['Продавцы', 'Sellers'], ['Заказы продавцов', 'Seller orders'], ['Одобрить', 'Approve'], ['Отклонить', 'Reject'],
+  ['Возврат заказа', 'Order refund'], ['Введите причину возврата:', 'Enter the refund reason:'],
   ['Язык', 'Language'], ['Русский', 'Russian'], ['Английский', 'English']
 ].sort((a,b)=>b[0].length-a[0].length);
 

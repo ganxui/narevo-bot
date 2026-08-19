@@ -1,17 +1,31 @@
 import crypto from 'node:crypto';
 
 const normalizeInvoice = data => data?.invoice || data?.data?.invoice || data?.data || data;
+let tokenCache={token:'',expiresAt:0};
+
+export function __resetLztTokenCacheForTests(){tokenCache={token:'',expiresAt:0}}
 
 export function lztReady(config){
-  return Boolean(config?.lzt?.apiToken && config?.lzt?.merchantId);
+  return Boolean((config?.lzt?.apiToken||(config?.lzt?.clientId&&config?.lzt?.clientSecret))&&config?.lzt?.merchantId);
+}
+
+async function getAccessToken(config){
+  if(config.lzt.apiToken)return config.lzt.apiToken;
+  if(tokenCache.token&&tokenCache.expiresAt>Date.now()+30_000)return tokenCache.token;
+  const response=await fetch(config.lzt.oauthUrl||'https://api.lolz.team/oauth/token',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({grant_type:'client_credentials',scope:['invoice'],client_id:config.lzt.clientId,client_secret:config.lzt.clientSecret})});
+  const data=await response.json().catch(()=>({}));
+  if(!response.ok||!data.access_token)throw Error(data.message||`LZT OAuth: HTTP ${response.status}`);
+  tokenCache={token:String(data.access_token),expiresAt:Date.now()+Math.max(60,Number(data.expires_in)||3600)*1000};
+  return tokenCache.token;
 }
 
 async function lztRequest(config, method, endpoint, payload){
   if(!lztReady(config)) throw Error('LZT Market пока не настроен');
+  const accessToken=await getAccessToken(config);
   const response = await fetch(`${config.lzt.baseUrl}${endpoint}`, {
     method,
     headers: {
-      'Authorization': `Bearer ${config.lzt.apiToken}`,
+      'Authorization': `Bearer ${accessToken}`,
       'Accept': 'application/json',
       ...(payload ? {'Content-Type':'application/json'} : {})
     },
@@ -49,6 +63,8 @@ export async function createLztInvoice(config,{amount,topupId,user}){
     merchant_id: Number(config.lzt.merchantId),
     lifetime: 3600,
     additional_data: JSON.stringify({topupId:String(topupId),telegramId:Number(user?.id||0)}),
+    ...(user?.id?{required_telegram_id:Number(user.id)}:{}),
+    ...(user?.username?{required_telegram_username:`@${String(user.username).replace(/^@/,'')}`}:{})
   };
   const invoice=normalizeInvoice(await lztRequest(config,'POST','/invoice',payload));
   if(!invoice?.invoice_id || !invoice?.url) throw Error('LZT Market вернул неполные данные счёта');
@@ -61,7 +77,7 @@ export async function getLztInvoice(config,invoiceId){
 }
 
 export function verifyLztWebhook(config,secret){
-  const expected=String(config?.lzt?.merchantToken||'');
+  const expected=String(config?.lzt?.merchantToken||config?.lzt?.merchantKey||'');
   const actual=String(secret||'');
   if(!expected||!actual)return false;
   const a=Buffer.from(expected);
